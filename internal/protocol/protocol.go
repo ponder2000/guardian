@@ -24,6 +24,8 @@ const (
 	MsgHeartbeatPing   MessageType = 0x06
 	MsgHeartbeatPong   MessageType = 0x07
 	MsgRevokeNotice    MessageType = 0x08
+	MsgStatusRequest   MessageType = 0x09
+	MsgStatusResponse  MessageType = 0x0A
 	MsgError           MessageType = 0xFF
 )
 
@@ -79,6 +81,20 @@ type HeartbeatPong struct {
 type RevokeNotice struct {
 	Reason    string `msgpack:"reason"`
 	Timestamp int64  `msgpack:"timestamp"`
+}
+
+// StatusRequest is sent by an anonymous client to check daemon health.
+// The message type alone is sufficient; the struct is empty.
+type StatusRequest struct{}
+
+// StatusResponse is the daemon's reply to a StatusRequest.
+type StatusResponse struct {
+	Status        string `msgpack:"status"`
+	HWStatus      string `msgpack:"hw_status"`
+	LicenseStatus string `msgpack:"license_status"`
+	ExpiresInDays int    `msgpack:"expires_in_days"`
+	DaemonVersion string `msgpack:"daemon_version"`
+	Uptime        int64  `msgpack:"uptime"`
 }
 
 // ErrorMsg represents a generic error message.

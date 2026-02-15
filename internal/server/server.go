@@ -28,6 +28,8 @@ type Server struct {
 	maxAuthAttempts int
 	authTimeout    time.Duration
 	nonceSize      int
+	version        string
+	startedAt      time.Time
 	mu             sync.Mutex
 	connections    map[net.Conn]*connState
 	ctx            context.Context
@@ -52,6 +54,7 @@ type Config struct {
 	AuthTimeout     time.Duration
 	NonceSize       int
 	SessionTimeout  time.Duration
+	DaemonVersion   string
 }
 
 // New creates a new server.
@@ -68,6 +71,7 @@ func New(cfg Config) *Server {
 		maxAuthAttempts: cfg.MaxAuthAttempts,
 		authTimeout:     cfg.AuthTimeout,
 		nonceSize:       cfg.NonceSize,
+		version:         cfg.DaemonVersion,
 		connections:     make(map[net.Conn]*connState),
 		ctx:             ctx,
 		cancel:          cancel,
@@ -76,6 +80,8 @@ func New(cfg Config) *Server {
 
 // Start begins listening on the Unix domain socket.
 func (s *Server) Start() error {
+	s.startedAt = time.Now()
+
 	// Remove stale socket file
 	os.Remove(s.socketPath)
 
@@ -208,14 +214,21 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Step 2: Read SERVICE_AUTH
+	// Step 2: Read client's first message (SERVICE_AUTH or STATUS_REQUEST)
 	msgType, data, err := protocol.ReadMessage(conn)
 	if err != nil {
 		s.logger.Printf("server: read auth error: %v", err)
 		return
 	}
-	if msgType != protocol.MsgServiceAuth {
-		s.logger.Printf("server: expected SERVICE_AUTH, got 0x%02x", msgType)
+
+	switch msgType {
+	case protocol.MsgStatusRequest:
+		s.handleStatusRequest(conn)
+		return
+	case protocol.MsgServiceAuth:
+		// continue with authentication below
+	default:
+		s.logger.Printf("server: expected SERVICE_AUTH or STATUS_REQUEST, got 0x%02x", msgType)
 		return
 	}
 
@@ -341,5 +354,24 @@ func (s *Server) handleHeartbeat(conn net.Conn, session *auth.Session, data []by
 
 	if err := protocol.WriteEncryptedMessage(conn, protocol.MsgHeartbeatPong, &pong, session.SessionKey); err != nil {
 		s.logger.Printf("server: write heartbeat pong error: %v", err)
+	}
+}
+
+func (s *Server) handleStatusRequest(conn net.Conn) {
+	resp := protocol.StatusResponse{
+		Status:        "ok",
+		HWStatus:      "ok",
+		LicenseStatus: "ok",
+		ExpiresInDays: s.license.DaysUntilExpiry(),
+		DaemonVersion: s.version,
+		Uptime:        int64(time.Since(s.startedAt).Seconds()),
+	}
+
+	if err := s.license.CheckExpiry(); err != nil {
+		resp.LicenseStatus = "expired"
+	}
+
+	if err := protocol.WriteMessage(conn, protocol.MsgStatusResponse, &resp); err != nil {
+		s.logger.Printf("server: write status response error: %v", err)
 	}
 }

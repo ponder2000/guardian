@@ -115,6 +115,8 @@ public class GuardianClient implements AutoCloseable {
     private static final byte MSG_LICENSE_RESPONSE = 0x05;
     private static final byte MSG_HEARTBEAT_PING   = 0x06;
     private static final byte MSG_HEARTBEAT_PONG   = 0x07;
+    private static final byte MSG_STATUS_REQUEST   = 0x09;
+    private static final byte MSG_STATUS_RESPONSE  = 0x0A;
 
     // ---- Ed25519 DER prefix for X.509 SubjectPublicKeyInfo encoding ----
     /**
@@ -231,6 +233,72 @@ public class GuardianClient implements AutoCloseable {
                     ", hwStatus='" + hwStatus + '\'' +
                     ", licenseStatus='" + licenseStatus + '\'' +
                     ", expiresInDays=" + expiresInDays +
+                    '}';
+        }
+    }
+
+    /**
+     * Holds the result of an anonymous status check against the Guardian daemon.
+     *
+     * <p>Contains only non-sensitive operational health data. No module names,
+     * features, license IDs, customer info, or hardware fingerprint values are exposed.</p>
+     */
+    public static class StatusInfo {
+
+        private final String status;
+        private final String hwStatus;
+        private final String licenseStatus;
+        private final int expiresInDays;
+        private final String daemonVersion;
+        private final long uptime;
+
+        /**
+         * Constructs a new {@code StatusInfo} instance.
+         *
+         * @param status        overall status ("ok" or "error")
+         * @param hwStatus      hardware binding status
+         * @param licenseStatus license status ("ok" or "expired")
+         * @param expiresInDays days until license expiration
+         * @param daemonVersion daemon build version string
+         * @param uptime        seconds since daemon start
+         */
+        public StatusInfo(String status, String hwStatus, String licenseStatus,
+                          int expiresInDays, String daemonVersion, long uptime) {
+            this.status = status;
+            this.hwStatus = hwStatus;
+            this.licenseStatus = licenseStatus;
+            this.expiresInDays = expiresInDays;
+            this.daemonVersion = daemonVersion;
+            this.uptime = uptime;
+        }
+
+        /** Returns the overall daemon status ("ok" or "error"). */
+        public String getStatus() { return status; }
+
+        /** Returns the hardware binding status. */
+        public String getHwStatus() { return hwStatus; }
+
+        /** Returns the license status ("ok" or "expired"). */
+        public String getLicenseStatus() { return licenseStatus; }
+
+        /** Returns the number of days until the license expires. */
+        public int getExpiresInDays() { return expiresInDays; }
+
+        /** Returns the daemon build version string. */
+        public String getDaemonVersion() { return daemonVersion; }
+
+        /** Returns the number of seconds since the daemon started. */
+        public long getUptime() { return uptime; }
+
+        @Override
+        public String toString() {
+            return "StatusInfo{" +
+                    "status='" + status + '\'' +
+                    ", hwStatus='" + hwStatus + '\'' +
+                    ", licenseStatus='" + licenseStatus + '\'' +
+                    ", expiresInDays=" + expiresInDays +
+                    ", daemonVersion='" + daemonVersion + '\'' +
+                    ", uptime=" + uptime +
                     '}';
         }
     }
@@ -489,6 +557,127 @@ public class GuardianClient implements AutoCloseable {
     @Override
     public void close() {
         stop();
+    }
+
+    // -----------------------------------------------------------------------
+    // Anonymous status check
+    // -----------------------------------------------------------------------
+
+    /**
+     * Performs an anonymous status check against the Guardian daemon at the
+     * given socket path. No token file, authentication, or module name is
+     * required. The connection is closed after the response is received.
+     *
+     * <p>This is useful for health probes and monitoring systems that only
+     * need to know if the daemon is running and the license is valid.</p>
+     *
+     * @param socketPath path to the Guardian Unix domain socket
+     * @return the daemon's status information
+     * @throws GuardianException if the check fails
+     */
+    public static StatusInfo checkStatus(String socketPath) throws GuardianException {
+        SocketChannel channel = null;
+        try {
+            SocketAddress addr = UnixDomainSocketAddress.of(socketPath);
+            channel = SocketChannel.open(addr);
+            channel.configureBlocking(true);
+            InputStream in = Channels.newInputStream(channel);
+            OutputStream out = Channels.newOutputStream(channel);
+
+            // Read GUARDIAN_HELLO (skip signature verification — anonymous).
+            byte[] lenBuf = readExactFrom(in, 4);
+            int totalLen = ByteBuffer.wrap(lenBuf).getInt();
+            if (totalLen < 1 || totalLen > MAX_MESSAGE_SIZE) {
+                throw new GuardianException("Invalid hello frame length: " + totalLen);
+            }
+            byte[] typeBuf = readExactFrom(in, 1);
+            if (typeBuf[0] != MSG_GUARDIAN_HELLO) {
+                throw new GuardianException(
+                        "Expected GUARDIAN_HELLO (0x01), got 0x" + String.format("%02x", typeBuf[0]));
+            }
+            // Consume the rest of the hello payload.
+            int payloadLen = totalLen - 1;
+            if (payloadLen > 0) {
+                readExactFrom(in, payloadLen);
+            }
+
+            // Send STATUS_REQUEST (empty msgpack map).
+            byte[] emptyMap;
+            try (MessageBufferPacker packer = MessagePack.newDefaultBufferPacker()) {
+                packer.packMapHeader(0);
+                emptyMap = packer.toByteArray();
+            }
+            int reqTotalLen = 1 + emptyMap.length;
+            ByteBuffer header = ByteBuffer.allocate(5);
+            header.putInt(reqTotalLen);
+            header.put(MSG_STATUS_REQUEST);
+            header.flip();
+            out.write(header.array());
+            out.write(emptyMap);
+            out.flush();
+
+            // Read STATUS_RESPONSE.
+            byte[] respLenBuf = readExactFrom(in, 4);
+            int respTotalLen = ByteBuffer.wrap(respLenBuf).getInt();
+            if (respTotalLen < 1 || respTotalLen > MAX_MESSAGE_SIZE) {
+                throw new GuardianException("Invalid status response frame length: " + respTotalLen);
+            }
+            byte[] respTypeBuf = readExactFrom(in, 1);
+            if (respTypeBuf[0] != MSG_STATUS_RESPONSE) {
+                throw new GuardianException(
+                        "Expected STATUS_RESPONSE (0x0a), got 0x" + String.format("%02x", respTypeBuf[0]));
+            }
+            int respPayloadLen = respTotalLen - 1;
+            byte[] respPayload = respPayloadLen > 0 ? readExactFrom(in, respPayloadLen) : new byte[0];
+
+            Map<String, Object> fields = unpackMap(respPayload);
+
+            String status = fields.get("status") instanceof String ? (String) fields.get("status") : "";
+            String hwStatus = fields.get("hw_status") instanceof String ? (String) fields.get("hw_status") : "";
+            String licenseStatus = fields.get("license_status") instanceof String ? (String) fields.get("license_status") : "";
+            int expiresInDays = fields.get("expires_in_days") instanceof Number ? ((Number) fields.get("expires_in_days")).intValue() : 0;
+            String daemonVersion = fields.get("daemon_version") instanceof String ? (String) fields.get("daemon_version") : "";
+            long uptime = fields.get("uptime") instanceof Number ? ((Number) fields.get("uptime")).longValue() : 0;
+
+            return new StatusInfo(status, hwStatus, licenseStatus, expiresInDays, daemonVersion, uptime);
+
+        } catch (GuardianException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new GuardianException("Status check failed: " + e.getMessage(), e);
+        } finally {
+            if (channel != null) {
+                try { channel.close(); } catch (IOException ignored) { }
+            }
+        }
+    }
+
+    /**
+     * Convenience method that performs an anonymous status check using this
+     * client's configured socket path. Does not require {@link #start()} to
+     * have been called.
+     *
+     * @return the daemon's status information
+     * @throws GuardianException if the check fails
+     */
+    public StatusInfo statusCheck() throws GuardianException {
+        return checkStatus(this.socketPath);
+    }
+
+    /**
+     * Reads exactly {@code n} bytes from the given input stream.
+     */
+    private static byte[] readExactFrom(InputStream in, int n) throws IOException {
+        byte[] buf = new byte[n];
+        int offset = 0;
+        while (offset < n) {
+            int read = in.read(buf, offset, n - offset);
+            if (read < 0) {
+                throw new IOException("Unexpected end of stream (read " + offset + " of " + n + " bytes)");
+            }
+            offset += read;
+        }
+        return buf;
     }
 
     // -----------------------------------------------------------------------

@@ -181,6 +181,7 @@ func main() {
 		AuthTimeout:     cfg.Security.AuthTimeout,
 		NonceSize:       cfg.Security.NonceSize,
 		SessionTimeout:  cfg.Watchdog.SessionTimeout,
+		DaemonVersion:   version,
 	})
 
 	if err := srv.Start(); err != nil {

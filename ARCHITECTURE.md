@@ -157,6 +157,8 @@ All communication happens over a Unix domain socket using a length-prefixed bina
 | `0x06` | `HEARTBEAT_PING` | service → daemon | Encrypted |
 | `0x07` | `HEARTBEAT_PONG` | daemon → service | Encrypted |
 | `0x08` | `REVOKE_NOTICE` | daemon → service | Encrypted |
+| `0x09` | `STATUS_REQUEST` | service → daemon | Unauthenticated |
+| `0x0A` | `STATUS_RESPONSE` | daemon → service | Unauthenticated |
 
 ---
 
@@ -192,6 +194,40 @@ session_key = HMAC-SHA256(
 ```
 
 The session key is unique per connection (random nonces each time), cannot be computed without the token, and requires no key exchange.
+
+---
+
+## Anonymous Status Check
+
+After receiving `GUARDIAN_HELLO`, a client can send `STATUS_REQUEST` instead of `SERVICE_AUTH` to get a quick, unauthenticated health probe. No token, service ID, or module name is required. The daemon responds with `STATUS_RESPONSE` and closes the connection — no session is created.
+
+```mermaid
+sequenceDiagram
+    participant P as PROBE
+    participant G as GUARDIAN
+
+    P->>G: Connect to Unix socket
+    G->>P: GUARDIAN_HELLO { guardian_nonce, signature }
+    Note left of P: Signature verification<br/>is optional (skipped)
+    P->>G: STATUS_REQUEST {}
+    G->>P: STATUS_RESPONSE { status, hw_status, license_status, ... }
+    Note over P,G: Connection closed (no session)
+```
+
+**`STATUS_RESPONSE` payload:**
+
+```
+STATUS_RESPONSE {
+    status:         "ok" | "error",
+    hw_status:      "ok",
+    license_status: "ok" | "expired",
+    expires_in_days: 334,
+    daemon_version: "1.2.0",
+    uptime:         86400
+}
+```
+
+**What is NOT exposed:** module names, feature lists, license IDs, customer information, hardware fingerprint values, or any metadata. The response contains only operational health data safe for monitoring and health probes.
 
 ---
 
@@ -266,6 +302,7 @@ Environment=GUARDIAN_TOKEN_PATH=/etc/guardian/tokens/service_A.token
 | Non-root reads token files | File permissions `0600 root:root` | Blocked |
 | License expires mid-operation | Watchdog detects within 1 minute, sends REVOKE_NOTICE | Detected |
 | Hardware swapped mid-operation | Watchdog re-checks every 5 minutes, sends REVOKE_NOTICE | Detected |
+| Probe anonymous endpoint for secrets | STATUS_RESPONSE contains only health data (no modules, IDs, fingerprints) | Safe |
 
 ---
 

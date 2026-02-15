@@ -82,6 +82,16 @@ type LicenseInfo struct {
 	ExpiresInDays int
 }
 
+// StatusInfo holds the result of an anonymous status check.
+type StatusInfo struct {
+	Status        string
+	HWStatus      string
+	LicenseStatus string
+	ExpiresInDays int
+	DaemonVersion string
+	Uptime        int64
+}
+
 // HeartbeatInfo holds the result of a heartbeat exchange.
 type HeartbeatInfo struct {
 	HWStatus      string
@@ -280,6 +290,64 @@ func (c *Client) Close() error {
 	c.conn = nil
 	c.sessionKey = nil
 	return err
+}
+
+// CheckStatus performs an anonymous status check against the Guardian daemon at
+// the given socket path. It does not require a token file or authentication.
+// The connection is closed after the response is received.
+func CheckStatus(socketPath string) (*StatusInfo, error) {
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("guardian: connect to %s: %w", socketPath, err)
+	}
+	defer conn.Close()
+
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	// Read GUARDIAN_HELLO (skip signature verification — anonymous).
+	msgType, _, err := protocol.ReadMessage(conn)
+	if err != nil {
+		return nil, fmt.Errorf("guardian: read hello: %w", err)
+	}
+	if msgType != protocol.MsgGuardianHello {
+		return nil, fmt.Errorf("guardian: expected GUARDIAN_HELLO (0x%02x), got 0x%02x",
+			protocol.MsgGuardianHello, msgType)
+	}
+
+	// Send STATUS_REQUEST.
+	if err := protocol.WriteMessage(conn, protocol.MsgStatusRequest, &protocol.StatusRequest{}); err != nil {
+		return nil, fmt.Errorf("guardian: write status request: %w", err)
+	}
+
+	// Read STATUS_RESPONSE.
+	msgType, data, err := protocol.ReadMessage(conn)
+	if err != nil {
+		return nil, fmt.Errorf("guardian: read status response: %w", err)
+	}
+	if msgType != protocol.MsgStatusResponse {
+		return nil, fmt.Errorf("guardian: expected STATUS_RESPONSE (0x%02x), got 0x%02x",
+			protocol.MsgStatusResponse, msgType)
+	}
+
+	var resp protocol.StatusResponse
+	if err := protocol.Decode(data, &resp); err != nil {
+		return nil, fmt.Errorf("guardian: decode status response: %w", err)
+	}
+
+	return &StatusInfo{
+		Status:        resp.Status,
+		HWStatus:      resp.HWStatus,
+		LicenseStatus: resp.LicenseStatus,
+		ExpiresInDays: resp.ExpiresInDays,
+		DaemonVersion: resp.DaemonVersion,
+		Uptime:        resp.Uptime,
+	}, nil
+}
+
+// StatusCheck performs an anonymous status check using the client's configured
+// socket path. It does not require Connect() to have been called.
+func (c *Client) StatusCheck() (*StatusInfo, error) {
+	return CheckStatus(c.socketPath)
 }
 
 // IsConnected returns true if the client has an active authenticated connection.

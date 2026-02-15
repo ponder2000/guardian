@@ -21,7 +21,7 @@ import (
 //   - a Client configured to connect to that socket
 //
 // Returns the client and a cleanup function that stops the server.
-func setupTestClientServer(t *testing.T) (*Client, func()) {
+func setupTestClientServer(t *testing.T) (*Client, string, func()) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -115,11 +115,11 @@ func setupTestClientServer(t *testing.T) (*Client, func()) {
 		os.RemoveAll(sockDir)
 	}
 
-	return client, cleanup
+	return client, sockPath, cleanup
 }
 
 func TestClientConnectAndCheckLicense(t *testing.T) {
-	client, cleanup := setupTestClientServer(t)
+	client, _, cleanup := setupTestClientServer(t)
 	defer cleanup()
 
 	// Connect and authenticate.
@@ -155,7 +155,7 @@ func TestClientConnectAndCheckLicense(t *testing.T) {
 }
 
 func TestClientHeartbeat(t *testing.T) {
-	client, cleanup := setupTestClientServer(t)
+	client, _, cleanup := setupTestClientServer(t)
 	defer cleanup()
 
 	if err := client.Connect(); err != nil {
@@ -179,7 +179,7 @@ func TestClientHeartbeat(t *testing.T) {
 }
 
 func TestClientCheckLicenseDisabledModule(t *testing.T) {
-	client, cleanup := setupTestClientServer(t)
+	client, _, cleanup := setupTestClientServer(t)
 	defer cleanup()
 
 	if err := client.Connect(); err != nil {
@@ -321,5 +321,56 @@ func TestClientDefaultOptions(t *testing.T) {
 	}
 	if client3.tokenPath != defaultTokenPath {
 		t.Errorf("tokenPath = %q, want %q (built-in default)", client3.tokenPath, defaultTokenPath)
+	}
+}
+
+func TestCheckStatus(t *testing.T) {
+	_, sockPath, cleanup := setupTestClientServer(t)
+	defer cleanup()
+
+	info, err := CheckStatus(sockPath)
+	if err != nil {
+		t.Fatalf("CheckStatus() error: %v", err)
+	}
+
+	if info.Status != "ok" {
+		t.Errorf("Status = %q, want %q", info.Status, "ok")
+	}
+	if info.HWStatus != "ok" {
+		t.Errorf("HWStatus = %q, want %q", info.HWStatus, "ok")
+	}
+	if info.LicenseStatus != "ok" {
+		t.Errorf("LicenseStatus = %q, want %q", info.LicenseStatus, "ok")
+	}
+	if info.ExpiresInDays <= 0 {
+		t.Errorf("ExpiresInDays = %d, expected > 0", info.ExpiresInDays)
+	}
+	if info.Uptime < 0 {
+		t.Errorf("Uptime = %d, expected >= 0", info.Uptime)
+	}
+}
+
+func TestClientStatusCheck(t *testing.T) {
+	client, _, cleanup := setupTestClientServer(t)
+	defer cleanup()
+
+	// StatusCheck should work without calling Connect() first.
+	info, err := client.StatusCheck()
+	if err != nil {
+		t.Fatalf("StatusCheck() error: %v", err)
+	}
+
+	if info.Status != "ok" {
+		t.Errorf("Status = %q, want %q", info.Status, "ok")
+	}
+	if info.LicenseStatus != "ok" {
+		t.Errorf("LicenseStatus = %q, want %q", info.LicenseStatus, "ok")
+	}
+}
+
+func TestCheckStatusDaemonNotRunning(t *testing.T) {
+	_, err := CheckStatus("/tmp/nonexistent-guardian-test.sock")
+	if err == nil {
+		t.Fatal("CheckStatus() expected error for non-existent socket, got nil")
 	}
 }

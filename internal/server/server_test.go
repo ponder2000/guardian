@@ -241,6 +241,107 @@ func TestServerHeartbeat(t *testing.T) {
 	}
 }
 
+func TestServerStatusCheck(t *testing.T) {
+	srv, sockPath, _, _ := setupTestServer(t)
+
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+	defer srv.Stop()
+
+	conn, err := net.Dial("unix", sockPath)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+
+	// Read GUARDIAN_HELLO
+	msgType, _, err := protocol.ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
+	if msgType != protocol.MsgGuardianHello {
+		t.Fatalf("expected MsgGuardianHello, got 0x%02x", msgType)
+	}
+
+	// Send STATUS_REQUEST instead of SERVICE_AUTH
+	if err := protocol.WriteMessage(conn, protocol.MsgStatusRequest, &protocol.StatusRequest{}); err != nil {
+		t.Fatalf("write status request: %v", err)
+	}
+
+	// Read STATUS_RESPONSE
+	msgType, data, err := protocol.ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("read status response: %v", err)
+	}
+	if msgType != protocol.MsgStatusResponse {
+		t.Fatalf("expected MsgStatusResponse (0x%02x), got 0x%02x", protocol.MsgStatusResponse, msgType)
+	}
+
+	var resp protocol.StatusResponse
+	protocol.Decode(data, &resp)
+
+	if resp.Status != "ok" {
+		t.Errorf("Status = %q, want %q", resp.Status, "ok")
+	}
+	if resp.HWStatus != "ok" {
+		t.Errorf("HWStatus = %q, want %q", resp.HWStatus, "ok")
+	}
+	if resp.LicenseStatus != "ok" {
+		t.Errorf("LicenseStatus = %q, want %q", resp.LicenseStatus, "ok")
+	}
+	if resp.ExpiresInDays <= 0 {
+		t.Errorf("ExpiresInDays = %d, expected > 0", resp.ExpiresInDays)
+	}
+	if resp.Uptime < 0 {
+		t.Errorf("Uptime = %d, expected >= 0", resp.Uptime)
+	}
+}
+
+func TestServerStatusCheckNoSession(t *testing.T) {
+	srv, sockPath, _, _ := setupTestServer(t)
+
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Start() error: %v", err)
+	}
+	defer srv.Stop()
+
+	conn, err := net.Dial("unix", sockPath)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	// Read GUARDIAN_HELLO
+	msgType, _, err := protocol.ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
+	if msgType != protocol.MsgGuardianHello {
+		t.Fatalf("expected MsgGuardianHello, got 0x%02x", msgType)
+	}
+
+	// Send STATUS_REQUEST
+	if err := protocol.WriteMessage(conn, protocol.MsgStatusRequest, &protocol.StatusRequest{}); err != nil {
+		t.Fatalf("write status request: %v", err)
+	}
+
+	// Read STATUS_RESPONSE
+	_, _, err = protocol.ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("read status response: %v", err)
+	}
+
+	conn.Close()
+
+	// Give the server time to clean up
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify no session was created
+	if srv.SessionManager().Count() != 0 {
+		t.Errorf("session count = %d, want 0 (status check should not create sessions)", srv.SessionManager().Count())
+	}
+}
+
 func TestServerBadAuth(t *testing.T) {
 	srv, sockPath, _, _ := setupTestServer(t)
 

@@ -60,6 +60,8 @@ from cryptography.exceptions import InvalidSignature
 __all__ = [
     "GuardianClient",
     "LicenseDetails",
+    "StatusInfo",
+    "check_status",
     "GuardianError",
     "GuardianConnectionError",
     "GuardianAuthError",
@@ -83,6 +85,8 @@ _MSG_LICENSE_REQUEST = 0x04
 _MSG_LICENSE_RESPONSE = 0x05
 _MSG_HEARTBEAT_PING = 0x06
 _MSG_HEARTBEAT_PONG = 0x07
+_MSG_STATUS_REQUEST = 0x09
+_MSG_STATUS_RESPONSE = 0x0A
 
 _CLIENT_NONCE_SIZE = 32
 _AES_GCM_NONCE_SIZE = 12
@@ -146,6 +150,99 @@ class LicenseDetails:
     hw_status: str = ""
     license_status: str = ""
     expires_in_days: int = 0
+
+
+@dataclass
+class StatusInfo:
+    """Result of an anonymous status check against the Guardian daemon.
+
+    Contains only non-sensitive operational health data.  No module names,
+    features, license IDs, customer info, or hardware fingerprint values
+    are exposed.
+
+    Attributes:
+        status: Overall daemon status ("ok" or "error").
+        hw_status: Hardware binding status.
+        license_status: License status ("ok" or "expired").
+        expires_in_days: Days until the license expires.
+        daemon_version: Daemon build version string.
+        uptime: Seconds since the daemon started.
+    """
+
+    status: str = ""
+    hw_status: str = ""
+    license_status: str = ""
+    expires_in_days: int = 0
+    daemon_version: str = ""
+    uptime: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Anonymous status check
+# ---------------------------------------------------------------------------
+
+
+def check_status(
+    socket_path: str = _DEFAULT_SOCKET_PATH,
+    timeout: float = 5.0,
+) -> StatusInfo:
+    """Perform an anonymous status check against the Guardian daemon.
+
+    Connects to the daemon, reads the hello message (without verifying the
+    signature), sends a ``STATUS_REQUEST``, reads the ``STATUS_RESPONSE``,
+    and closes the connection.  No token file or authentication is required.
+
+    Args:
+        socket_path: Path to the Guardian Unix domain socket.
+        timeout: Socket timeout in seconds (default 5).
+
+    Returns:
+        A populated :class:`StatusInfo` instance.
+
+    Raises:
+        GuardianConnectionError: If the daemon is unreachable.
+        GuardianProtocolError: On wire-protocol violations.
+    """
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        try:
+            sock.connect(socket_path)
+        except OSError as exc:
+            raise GuardianConnectionError(
+                f"cannot connect to {socket_path}: {exc}"
+            ) from exc
+
+        # Read GUARDIAN_HELLO (skip signature verification — anonymous).
+        msg_type, _payload = _read_message(sock)
+        if msg_type != _MSG_GUARDIAN_HELLO:
+            raise GuardianProtocolError(
+                f"expected GUARDIAN_HELLO (0x{_MSG_GUARDIAN_HELLO:02x}), "
+                f"got 0x{msg_type:02x}"
+            )
+
+        # Send STATUS_REQUEST (empty payload).
+        _write_message(sock, _MSG_STATUS_REQUEST, {})
+
+        # Read STATUS_RESPONSE.
+        msg_type, payload = _read_message(sock)
+        if msg_type != _MSG_STATUS_RESPONSE:
+            raise GuardianProtocolError(
+                f"expected STATUS_RESPONSE (0x{_MSG_STATUS_RESPONSE:02x}), "
+                f"got 0x{msg_type:02x}"
+            )
+
+        resp = msgpack.unpackb(payload, raw=False)
+        return StatusInfo(
+            status=resp.get("status", ""),
+            hw_status=resp.get("hw_status", ""),
+            license_status=resp.get("license_status", ""),
+            expires_in_days=int(resp.get("expires_in_days", 0)),
+            daemon_version=resp.get("daemon_version", ""),
+            uptime=int(resp.get("uptime", 0)),
+        )
+    finally:
+        sock.close()
 
 
 # ---------------------------------------------------------------------------
@@ -546,6 +643,21 @@ class GuardianClient:
         """True if the client currently holds an authenticated connection."""
         with self._lock:
             return self._sock is not None and self._session_key is not None
+
+    def status_check(self) -> StatusInfo:
+        """Perform an anonymous status check using this client's socket path.
+
+        Does not require :meth:`start` to have been called.  No token file
+        or authentication is needed.
+
+        Returns:
+            A populated :class:`StatusInfo` instance.
+
+        Raises:
+            GuardianConnectionError: If the daemon is unreachable.
+            GuardianProtocolError: On wire-protocol violations.
+        """
+        return check_status(self._socket_path)
 
     # ------------------------------------------------------------------
     # Connection management (must hold self._lock)

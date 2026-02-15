@@ -33,6 +33,7 @@ graph TD
 3. **Service Authentication** — Each service connects to the socket and performs a mutual handshake: the daemon proves its identity via Ed25519 signature, and the service proves it holds a valid token via HMAC-SHA256.
 4. **Encrypted Channel** — After authentication, all communication is AES-256-GCM encrypted with a per-session key derived from the handshake nonces.
 5. **Periodic Checks** — The daemon's watchdog re-verifies hardware and license expiry. Services poll via heartbeats. On failure, a `REVOKE_NOTICE` is broadcast.
+6. **Anonymous Status Check** — Any process can connect and send a `STATUS_REQUEST` (without authentication) to check if the daemon is running and the license is healthy. Only non-sensitive operational data is returned (status, expiry days, uptime, version). No session is created.
 
 ### Components
 
@@ -223,6 +224,8 @@ Every service needs to:
 
 All three SDKs (Go, Python, Java) follow the same pattern: you provide a **module name**, a **check interval**, a **valid handler** (called when the license is OK), and an **invalid handler** (called when it fails). The SDK handles connection, authentication, periodic checking, and reconnection automatically.
 
+**Anonymous status check:** All SDKs also provide a lightweight `checkStatus` / `check_status` function that requires no token or authentication. It connects, sends a `STATUS_REQUEST`, and returns non-sensitive health data (status, license status, expiry days, daemon version, uptime). Useful for health probes and monitoring.
+
 ---
 
 #### Go
@@ -291,6 +294,22 @@ func main() {
 - `ForceCheck()` performs an immediate check and returns `*LicenseInfo` directly (also triggers callbacks).
 - `Stop()` halts the background goroutine and closes the connection.
 
+**Anonymous status check** (no token or auth required):
+
+```go
+// Standalone function — just needs the socket path:
+status, err := guardian.CheckStatus("/var/run/guardian/guardian.sock")
+if err != nil {
+    log.Fatal("Guardian not reachable:", err)
+}
+fmt.Printf("Status: %s, License: %s, Expires in %d days, Version: %s\n",
+    status.Status, status.LicenseStatus, status.ExpiresInDays, status.DaemonVersion)
+
+// Or via a Client instance (uses the client's configured socket path):
+client := guardian.NewClient(guardian.WithSocket("/var/run/guardian/guardian.sock"))
+status, err = client.StatusCheck()
+```
+
 ---
 
 #### Python
@@ -345,6 +364,20 @@ try:
         time.sleep(1)
 except KeyboardInterrupt:
     client.stop()
+```
+
+**Anonymous status check** (no token or auth required):
+
+```python
+from guardian_client import check_status
+
+status = check_status("/var/run/guardian/guardian.sock")
+print(f"Status: {status.status}, License: {status.license_status}")
+print(f"Expires in {status.expires_in_days} days, Version: {status.daemon_version}")
+
+# Or via a client instance:
+client = GuardianClient(module="unused")
+status = client.status_check()
 ```
 
 **Environment variables** (alternative to constructor args):
@@ -410,6 +443,24 @@ public class MyService {
         Thread.currentThread().join();
     }
 }
+```
+
+**Anonymous status check** (no token or auth required):
+
+```java
+import com.guardian.GuardianClient;
+import com.guardian.GuardianClient.StatusInfo;
+
+// Standalone — just needs the socket path:
+StatusInfo status = GuardianClient.checkStatus("/var/run/guardian/guardian.sock");
+System.out.println("Status: " + status.getStatus());
+System.out.println("License: " + status.getLicenseStatus());
+System.out.println("Expires in " + status.getExpiresInDays() + " days");
+System.out.println("Version: " + status.getDaemonVersion());
+
+// Or via a client instance:
+GuardianClient client = new GuardianClient.Builder().module("unused").build();
+StatusInfo info = client.statusCheck();
 ```
 
 **Environment variables** (alternative to builder):

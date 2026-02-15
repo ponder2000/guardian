@@ -412,6 +412,80 @@ func TestDecryptedMessageWrongKey(t *testing.T) {
 	}
 }
 
+func TestWriteReadStatusRequest(t *testing.T) {
+	var buf bytes.Buffer
+
+	original := StatusRequest{}
+
+	if err := WriteMessage(&buf, MsgStatusRequest, &original); err != nil {
+		t.Fatalf("WriteMessage failed: %v", err)
+	}
+
+	msgType, data, err := ReadMessage(&buf)
+	if err != nil {
+		t.Fatalf("ReadMessage failed: %v", err)
+	}
+
+	if msgType != MsgStatusRequest {
+		t.Fatalf("expected message type 0x%02x, got 0x%02x", MsgStatusRequest, msgType)
+	}
+
+	var decoded StatusRequest
+	if err := Decode(data, &decoded); err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+}
+
+func TestWriteReadStatusResponse(t *testing.T) {
+	var buf bytes.Buffer
+
+	original := StatusResponse{
+		Status:        "ok",
+		HWStatus:      "ok",
+		LicenseStatus: "ok",
+		ExpiresInDays: 364,
+		DaemonVersion: "1.2.3",
+		Uptime:        3600,
+	}
+
+	if err := WriteMessage(&buf, MsgStatusResponse, &original); err != nil {
+		t.Fatalf("WriteMessage failed: %v", err)
+	}
+
+	msgType, data, err := ReadMessage(&buf)
+	if err != nil {
+		t.Fatalf("ReadMessage failed: %v", err)
+	}
+
+	if msgType != MsgStatusResponse {
+		t.Fatalf("expected message type 0x%02x, got 0x%02x", MsgStatusResponse, msgType)
+	}
+
+	var decoded StatusResponse
+	if err := Decode(data, &decoded); err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+
+	if decoded.Status != original.Status {
+		t.Errorf("Status mismatch: got %q, want %q", decoded.Status, original.Status)
+	}
+	if decoded.HWStatus != original.HWStatus {
+		t.Errorf("HWStatus mismatch: got %q, want %q", decoded.HWStatus, original.HWStatus)
+	}
+	if decoded.LicenseStatus != original.LicenseStatus {
+		t.Errorf("LicenseStatus mismatch: got %q, want %q", decoded.LicenseStatus, original.LicenseStatus)
+	}
+	if decoded.ExpiresInDays != original.ExpiresInDays {
+		t.Errorf("ExpiresInDays mismatch: got %d, want %d", decoded.ExpiresInDays, original.ExpiresInDays)
+	}
+	if decoded.DaemonVersion != original.DaemonVersion {
+		t.Errorf("DaemonVersion mismatch: got %q, want %q", decoded.DaemonVersion, original.DaemonVersion)
+	}
+	if decoded.Uptime != original.Uptime {
+		t.Errorf("Uptime mismatch: got %d, want %d", decoded.Uptime, original.Uptime)
+	}
+}
+
 func TestMessageTypeConstants(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -426,6 +500,8 @@ func TestMessageTypeConstants(t *testing.T) {
 		{"MsgHeartbeatPing", MsgHeartbeatPing, 0x06},
 		{"MsgHeartbeatPong", MsgHeartbeatPong, 0x07},
 		{"MsgRevokeNotice", MsgRevokeNotice, 0x08},
+		{"MsgStatusRequest", MsgStatusRequest, 0x09},
+		{"MsgStatusResponse", MsgStatusResponse, 0x0A},
 		{"MsgError", MsgError, 0xFF},
 	}
 
