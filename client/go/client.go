@@ -1,5 +1,25 @@
 // Package guardian provides a client SDK for connecting to the Guardian daemon
 // and checking licenses over a Unix domain socket.
+//
+// Two usage modes are supported:
+//
+// Low-level: call Connect(), CheckLicense(), Heartbeat(), Close() directly.
+//
+// High-level (recommended): configure callbacks and periodic checking, then
+// call Start()/Stop():
+//
+//	client := guardian.NewClient(
+//	    guardian.WithModule("my-module"),
+//	    guardian.WithCheckInterval(5 * time.Minute),
+//	    guardian.WithValidHandler(func(info *guardian.LicenseInfo) {
+//	        log.Println("License valid:", info.Features)
+//	    }),
+//	    guardian.WithInvalidHandler(func(info *guardian.LicenseInfo, err error) {
+//	        log.Fatal("License invalid:", err)
+//	    }),
+//	)
+//	if err := client.Start(); err != nil { log.Fatal(err) }
+//	defer client.Stop()
 package guardian
 
 import (
@@ -17,20 +37,34 @@ import (
 )
 
 const (
-	defaultSocketPath = "/var/run/guardian/guardian.sock"
-	defaultTokenPath  = "/etc/guardian/token"
-	clientNonceSize   = 32
+	defaultSocketPath    = "/var/run/guardian/guardian.sock"
+	defaultTokenPath     = "/etc/guardian/token"
+	defaultCheckInterval = 5 * time.Minute
+	clientNonceSize      = 32
 )
+
+// ValidHandler is called when a periodic or forced license check succeeds.
+type ValidHandler func(info *LicenseInfo)
+
+// InvalidHandler is called when a periodic or forced license check fails.
+type InvalidHandler func(info *LicenseInfo, err error)
 
 // Client connects to a Guardian daemon over a Unix domain socket and provides
 // methods to check licenses and send heartbeats.
 type Client struct {
-	socketPath string
-	tokenPath  string
-	conn       net.Conn
-	sessionKey []byte
-	serviceID  string
-	mu         sync.Mutex
+	socketPath     string
+	tokenPath      string
+	module         string
+	checkInterval  time.Duration
+	validHandler   ValidHandler
+	invalidHandler InvalidHandler
+	conn           net.Conn
+	sessionKey     []byte
+	serviceID      string
+	mu             sync.Mutex
+	stopCh         chan struct{}
+	stopped        chan struct{}
+	running        bool
 }
 
 // Option configures a Client.
@@ -38,11 +72,14 @@ type Option func(*Client)
 
 // LicenseInfo holds the result of a license check for a specific module.
 type LicenseInfo struct {
-	Valid     bool
-	Module    string
-	ExpiresAt string
-	Features  []string
-	Limits    map[string]interface{}
+	Valid         bool
+	Module        string
+	ExpiresAt     string
+	Features      []string
+	Metadata      map[string]interface{}
+	HWStatus      string
+	LicenseStatus string
+	ExpiresInDays int
 }
 
 // HeartbeatInfo holds the result of a heartbeat exchange.
@@ -58,8 +95,9 @@ type HeartbeatInfo struct {
 // (overridden by GUARDIAN_TOKEN_PATH env var).
 func NewClient(opts ...Option) *Client {
 	c := &Client{
-		socketPath: defaultSocketPath,
-		tokenPath:  defaultTokenPath,
+		socketPath:    defaultSocketPath,
+		tokenPath:     defaultTokenPath,
+		checkInterval: defaultCheckInterval,
 	}
 
 	// Environment variables override built-in defaults
@@ -89,6 +127,38 @@ func WithSocket(path string) Option {
 func WithTokenFile(path string) Option {
 	return func(c *Client) {
 		c.tokenPath = path
+	}
+}
+
+// WithModule returns an Option that sets the module name for periodic license
+// checks (used by Start and ForceCheck).
+func WithModule(module string) Option {
+	return func(c *Client) {
+		c.module = module
+	}
+}
+
+// WithCheckInterval returns an Option that sets how often the background
+// goroutine checks the license. Default is 5 minutes.
+func WithCheckInterval(d time.Duration) Option {
+	return func(c *Client) {
+		c.checkInterval = d
+	}
+}
+
+// WithValidHandler returns an Option that registers a callback invoked
+// whenever a periodic or forced license check succeeds.
+func WithValidHandler(h ValidHandler) Option {
+	return func(c *Client) {
+		c.validHandler = h
+	}
+}
+
+// WithInvalidHandler returns an Option that registers a callback invoked
+// whenever a periodic or forced license check fails.
+func WithInvalidHandler(h InvalidHandler) Option {
+	return func(c *Client) {
+		c.invalidHandler = h
 	}
 }
 
@@ -256,7 +326,7 @@ func (c *Client) CheckLicense(module string) (*LicenseInfo, error) {
 		Module:    resp.Module,
 		ExpiresAt: resp.ExpiresAt,
 		Features:  resp.Features,
-		Limits:    resp.Limits,
+		Metadata:  resp.Metadata,
 	}, nil
 }
 
@@ -297,4 +367,153 @@ func (c *Client) Heartbeat() (*HeartbeatInfo, error) {
 		LicenseStatus: pong.LicenseStatus,
 		ExpiresInDays: pong.ExpiresInDays,
 	}, nil
+}
+
+// Start connects to the Guardian daemon, performs the initial license check
+// for the configured module (see WithModule), and launches a background
+// goroutine that re-checks at the interval set by WithCheckInterval.
+//
+// On each check the registered ValidHandler or InvalidHandler is called.
+// If the connection drops, the goroutine attempts to reconnect automatically.
+//
+// Start returns an error only if the initial connect or license check fails.
+func (c *Client) Start() error {
+	if c.module == "" {
+		return fmt.Errorf("guardian: module not set (use WithModule)")
+	}
+
+	// Initial connect + check.
+	if err := c.Connect(); err != nil {
+		return err
+	}
+
+	info, err := c.doCheck()
+	if err != nil {
+		c.fireInvalid(nil, err)
+		c.Close()
+		return err
+	}
+	if !info.Valid {
+		checkErr := fmt.Errorf("guardian: license invalid for module %s", c.module)
+		c.fireInvalid(info, checkErr)
+		c.Close()
+		return checkErr
+	}
+	c.fireValid(info)
+
+	c.mu.Lock()
+	c.stopCh = make(chan struct{})
+	c.stopped = make(chan struct{})
+	c.running = true
+	c.mu.Unlock()
+
+	go c.periodicLoop()
+	return nil
+}
+
+// Stop halts the periodic checking goroutine and closes the connection.
+func (c *Client) Stop() {
+	c.mu.Lock()
+	if !c.running {
+		c.mu.Unlock()
+		return
+	}
+	c.running = false
+	close(c.stopCh)
+	c.mu.Unlock()
+
+	<-c.stopped
+	c.Close()
+}
+
+// ForceCheck performs an immediate license check for the configured module
+// and returns the result. It also invokes the registered callbacks.
+// If the client is not connected, it attempts to reconnect first.
+func (c *Client) ForceCheck() (*LicenseInfo, error) {
+	if !c.IsConnected() {
+		if err := c.Connect(); err != nil {
+			c.fireInvalid(nil, err)
+			return nil, err
+		}
+	}
+
+	info, err := c.doCheck()
+	if err != nil {
+		c.fireInvalid(nil, err)
+		return nil, err
+	}
+	if !info.Valid {
+		checkErr := fmt.Errorf("guardian: license invalid for module %s", c.module)
+		c.fireInvalid(info, checkErr)
+		return info, checkErr
+	}
+	c.fireValid(info)
+	return info, nil
+}
+
+// doCheck performs a license check + heartbeat and merges the results.
+func (c *Client) doCheck() (*LicenseInfo, error) {
+	licInfo, err := c.CheckLicense(c.module)
+	if err != nil {
+		return nil, err
+	}
+
+	hbInfo, err := c.Heartbeat()
+	if err != nil {
+		return licInfo, nil // license info is still useful
+	}
+
+	// Merge heartbeat fields into license info.
+	licInfo.HWStatus = hbInfo.HWStatus
+	licInfo.LicenseStatus = hbInfo.LicenseStatus
+	licInfo.ExpiresInDays = hbInfo.ExpiresInDays
+	return licInfo, nil
+}
+
+func (c *Client) periodicLoop() {
+	defer close(c.stopped)
+	ticker := time.NewTicker(c.checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			c.periodicCheck()
+		}
+	}
+}
+
+func (c *Client) periodicCheck() {
+	if !c.IsConnected() {
+		if err := c.Connect(); err != nil {
+			c.fireInvalid(nil, fmt.Errorf("guardian: reconnect failed: %w", err))
+			return
+		}
+	}
+
+	info, err := c.doCheck()
+	if err != nil {
+		c.fireInvalid(nil, err)
+		c.Close() // force reconnect on next tick
+		return
+	}
+	if !info.Valid {
+		c.fireInvalid(info, fmt.Errorf("guardian: license invalid for module %s", c.module))
+		return
+	}
+	c.fireValid(info)
+}
+
+func (c *Client) fireValid(info *LicenseInfo) {
+	if c.validHandler != nil {
+		c.validHandler(info)
+	}
+}
+
+func (c *Client) fireInvalid(info *LicenseInfo, err error) {
+	if c.invalidHandler != nil {
+		c.invalidHandler(info, err)
+	}
 }

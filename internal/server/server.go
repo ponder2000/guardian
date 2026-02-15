@@ -317,7 +317,7 @@ func (s *Server) handleLicenseRequest(conn net.Conn, session *auth.Session, data
 		resp.Valid = true
 		resp.ExpiresAt = s.license.License.ExpiresAt.Format("2006-01-02T15:04:05Z")
 		resp.Features = mod.Features
-		resp.Limits = mod.Limits
+		resp.Metadata = mod.Metadata
 	}
 
 	if err := protocol.WriteEncryptedMessage(conn, protocol.MsgLicenseResponse, &resp, session.SessionKey); err != nil {

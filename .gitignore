@@ -1,8 +1,8 @@
 # Binaries
 /bin/
-guardiand
-guardian-cli
-license-gen
+/guardiand
+/guardian-cli
+/license-gen
 *.exe
 *.exe~
 *.dll

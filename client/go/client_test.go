@@ -63,12 +63,12 @@ func setupTestClientServer(t *testing.T) (*Client, func()) {
 			"rdpms-core": {
 				Enabled:  true,
 				Features: []string{"feature-a", "feature-b"},
-				Limits:   map[string]interface{}{"max_users": float64(100)},
+				Metadata:   map[string]interface{}{"max_users": float64(100)},
 			},
 			"rdpms-analytics": {
 				Enabled:  false,
 				Features: []string{},
-				Limits:   map[string]interface{}{},
+				Metadata:   map[string]interface{}{},
 			},
 		},
 	}
@@ -149,8 +149,8 @@ func TestClientConnectAndCheckLicense(t *testing.T) {
 	if len(info.Features) != 2 {
 		t.Errorf("Features count = %d, want 2", len(info.Features))
 	}
-	if info.Limits["max_users"] != float64(100) {
-		t.Errorf("max_users limit = %v, want 100", info.Limits["max_users"])
+	if info.Metadata["max_users"] != float64(100) {
+		t.Errorf("max_users limit = %v, want 100", info.Metadata["max_users"])
 	}
 }
 
@@ -235,7 +235,7 @@ func TestClientConnectBadToken(t *testing.T) {
 		IssuedAt:  time.Now().UTC(),
 		ExpiresAt: time.Now().Add(365 * 24 * time.Hour).UTC(),
 		Modules: map[string]license.Module{
-			"rdpms-core": {Enabled: true, Features: []string{"f1"}, Limits: map[string]interface{}{}},
+			"rdpms-core": {Enabled: true, Features: []string{"f1"}, Metadata: map[string]interface{}{}},
 		},
 	}
 	licData, _ := license.CreateSignedFile(lic, masterKP.PrivateKey, "test")

@@ -33,12 +33,12 @@ func makeTestLicense() *License {
 			"rdpms-core": {
 				Enabled:  true,
 				Features: []string{"realtime-alerts", "data-export"},
-				Limits:   map[string]interface{}{"max_users": float64(50)},
+				Metadata:   map[string]interface{}{"max_users": float64(50)},
 			},
 			"analytics": {
 				Enabled:  false,
 				Features: []string{},
-				Limits:   map[string]interface{}{},
+				Metadata:   map[string]interface{}{},
 			},
 		},
 		GlobalLimits: map[string]interface{}{
@@ -240,8 +240,8 @@ func TestRoundTripLicenseModules(t *testing.T) {
 	if !rdpms.Enabled {
 		t.Error("rdpms-core should be enabled")
 	}
-	if maxUsers, ok := rdpms.Limits["max_users"].(float64); !ok || maxUsers != 50 {
-		t.Errorf("rdpms-core max_users = %v, want 50", rdpms.Limits["max_users"])
+	if maxUsers, ok := rdpms.Metadata["max_users"].(float64); !ok || maxUsers != 50 {
+		t.Errorf("rdpms-core max_users = %v, want 50", rdpms.Metadata["max_users"])
 	}
 }
 

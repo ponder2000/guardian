@@ -44,7 +44,7 @@ type HardwareSpec struct {
 type Module struct {
 	Enabled  bool                   `json:"enabled"`
 	Features []string               `json:"features"`
-	Limits   map[string]interface{} `json:"limits"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 // SignedLicense represents a complete signed license file.

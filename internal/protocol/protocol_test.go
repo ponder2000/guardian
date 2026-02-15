@@ -154,7 +154,7 @@ func TestWriteReadLicenseResponse(t *testing.T) {
 		Module:    "analytics-pro",
 		ExpiresAt: "2026-12-31T23:59:59Z",
 		Features:  []string{"dashboard", "export", "api"},
-		Limits: map[string]interface{}{
+		Metadata: map[string]interface{}{
 			"max_users": 100,
 			"max_seats": 50,
 		},
@@ -195,7 +195,7 @@ func TestWriteReadLicenseResponse(t *testing.T) {
 			t.Errorf("Feature[%d] mismatch: got %q, want %q", i, f, original.Features[i])
 		}
 	}
-	if decoded.Limits == nil {
+	if decoded.Metadata == nil {
 		t.Fatal("Limits should not be nil")
 	}
 	if decoded.Error != "" {

@@ -242,7 +242,7 @@ func cmdLicenseInfo(args []string) {
 				features = "-"
 			}
 
-			limits := formatLimits(mod.Limits)
+			limits := formatMetadata(mod.Metadata)
 			if limits == "" {
 				limits = "-"
 			}
@@ -669,13 +669,13 @@ func cmdImportLicense(args []string) {
 
 // ---------- helpers ----------
 
-// formatLimits converts a limits map to a compact display string.
-func formatLimits(limits map[string]interface{}) string {
-	if len(limits) == 0 {
+// formatMetadata converts a metadata map to a compact display string.
+func formatMetadata(meta map[string]interface{}) string {
+	if len(meta) == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(limits))
-	for k, v := range limits {
+	parts := make([]string, 0, len(meta))
+	for k, v := range meta {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
 	return strings.Join(parts, ", ")

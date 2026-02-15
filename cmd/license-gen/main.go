@@ -26,6 +26,7 @@ Usage:
 Commands:
   init      Generate a new Ed25519 master key pair
   create    Create a signed license file
+  update    Add or modify modules in an existing license file
   verify    Verify a license file signature
 
 Run 'license-gen <command> -h' for details on each command.
@@ -41,6 +42,31 @@ Options:
 const createUsage = `Usage: license-gen create [options]
 
 Create a signed license file from hardware info and module definitions.
+
+Options:
+`
+
+const updateUsage = `Usage: license-gen update [options]
+
+Add or modify modules in an existing license file. The updated license is
+re-signed with the master private key.
+
+Examples:
+  # Add a new module service_C to an existing license:
+  license-gen update --license=customer.license --sign-with=master.priv \
+      --module service_C:max_users=100,region=us-east --output=customer-updated.license
+
+  # Modify service_B metadata in an existing license:
+  license-gen update --license=customer.license --sign-with=master.priv \
+      --module service_B:max_users=200 --output=customer-updated.license
+
+  # Disable a module:
+  license-gen update --license=customer.license --sign-with=master.priv \
+      --disable service_A --output=customer-updated.license
+
+  # Change expiration date:
+  license-gen update --license=customer.license --sign-with=master.priv \
+      --expires=2028-06-30 --output=customer-updated.license
 
 Options:
 `
@@ -65,6 +91,8 @@ func main() {
 		cmdInit(os.Args[2:])
 	case "create":
 		cmdCreate(os.Args[2:])
+	case "update":
+		cmdUpdate(os.Args[2:])
 	case "verify":
 		cmdVerify(os.Args[2:])
 	case "-h", "--help", "help":
@@ -303,7 +331,7 @@ func parseModuleFlag(s string) (string, license.Module, error) {
 	mod := license.Module{
 		Enabled:  true,
 		Features: []string{},
-		Limits:   make(map[string]interface{}),
+		Metadata: make(map[string]interface{}),
 	}
 
 	if len(parts) == 2 && parts[1] != "" {
@@ -320,17 +348,172 @@ func parseModuleFlag(s string) (string, license.Module, error) {
 			var numVal json.Number = json.Number(val)
 			if _, err := numVal.Int64(); err == nil {
 				n, _ := numVal.Int64()
-				mod.Limits[key] = n
+				mod.Metadata[key] = n
 			} else if _, err := numVal.Float64(); err == nil {
 				f, _ := numVal.Float64()
-				mod.Limits[key] = f
+				mod.Metadata[key] = f
 			} else {
-				mod.Limits[key] = val
+				mod.Metadata[key] = val
 			}
 		}
 	}
 
 	return name, mod, nil
+}
+
+// disableFlags collects multiple --disable flag values.
+type disableFlags []string
+
+func (d *disableFlags) String() string {
+	return strings.Join(*d, ", ")
+}
+
+func (d *disableFlags) Set(value string) error {
+	*d = append(*d, value)
+	return nil
+}
+
+// cmdUpdate modifies modules in an existing license file and re-signs it.
+func cmdUpdate(args []string) {
+	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	licensePath := fs.String("license", "", "Path to the existing .license file")
+	signWith := fs.String("sign-with", "", "Path to master.priv key file")
+	output := fs.String("output", "", "Output path for the updated .license file")
+	expiresStr := fs.String("expires", "", "New expiration date in YYYY-MM-DD format (optional)")
+
+	var modules moduleFlags
+	fs.Var(&modules, "module", "Module definition: modname:key=val,key=val (repeatable)")
+
+	var disables disableFlags
+	fs.Var(&disables, "disable", "Module name to disable (repeatable)")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, updateUsage)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	// Validate required flags.
+	var missing []string
+	if *licensePath == "" {
+		missing = append(missing, "--license")
+	}
+	if *signWith == "" {
+		missing = append(missing, "--sign-with")
+	}
+	if *output == "" {
+		missing = append(missing, "--output")
+	}
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "Missing required flags: %s\n", strings.Join(missing, ", "))
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	if len(modules) == 0 && len(disables) == 0 && *expiresStr == "" {
+		fmt.Fprintf(os.Stderr, "Nothing to update: provide --module, --disable, or --expires\n")
+		os.Exit(1)
+	}
+
+	// Read and parse the existing license file.
+	licData, err := os.ReadFile(*licensePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read license file: %v\n", err)
+		os.Exit(1)
+	}
+
+	sl, err := license.ParseFile(licData)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse license file: %v\n", err)
+		os.Exit(1)
+	}
+
+	lic := sl.License
+
+	// Update expiration if provided.
+	if *expiresStr != "" {
+		expiresAt, err := time.Parse("2006-01-02", *expiresStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid expiration date %q: expected YYYY-MM-DD format\n", *expiresStr)
+			os.Exit(1)
+		}
+		expiresAt = expiresAt.UTC().Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		lic.ExpiresAt = expiresAt
+		fmt.Printf("  Updated expiration: %s\n", expiresAt.Format(time.RFC3339))
+	}
+
+	// Add or modify modules.
+	for _, modStr := range modules {
+		name, mod, err := parseModuleFlag(modStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid --module flag %q: %v\n", modStr, err)
+			os.Exit(1)
+		}
+
+		if existing, ok := lic.Modules[name]; ok {
+			// Merge metadata into existing module.
+			existing.Enabled = true
+			if existing.Metadata == nil {
+				existing.Metadata = make(map[string]interface{})
+			}
+			for k, v := range mod.Metadata {
+				existing.Metadata[k] = v
+			}
+			lic.Modules[name] = existing
+			fmt.Printf("  Modified module: %s\n", name)
+		} else {
+			// Add new module.
+			if lic.Modules == nil {
+				lic.Modules = make(map[string]license.Module)
+			}
+			lic.Modules[name] = mod
+			fmt.Printf("  Added module: %s\n", name)
+		}
+	}
+
+	// Disable modules.
+	for _, name := range disables {
+		if mod, ok := lic.Modules[name]; ok {
+			mod.Enabled = false
+			lic.Modules[name] = mod
+			fmt.Printf("  Disabled module: %s\n", name)
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: module %q not found in license, skipping disable\n", name)
+		}
+	}
+
+	// Load the private key.
+	privKey, err := crypto.LoadPrivateKey(*signWith)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load private key: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Derive signer fingerprint.
+	pubKeyBytes := privKey.Public().(ed25519.PublicKey)
+	signerHash := sha256.Sum256(pubKeyBytes)
+	signerFP := hex.EncodeToString(signerHash[:])
+
+	// Re-sign and write.
+	fileContent, err := license.CreateSignedFile(lic, privKey, signerFP)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create signed license: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(*output, fileContent, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write license file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("License updated successfully.\n")
+	fmt.Printf("  License ID:  %s\n", lic.LicenseID)
+	fmt.Printf("  Issued to:   %s\n", lic.IssuedTo)
+	fmt.Printf("  Expires at:  %s\n", lic.ExpiresAt.Format(time.RFC3339))
+	fmt.Printf("  Modules:     %d\n", len(lic.Modules))
+	fmt.Printf("  Output:      %s\n", *output)
 }
 
 // cmdVerify verifies the signature on a license file.
@@ -410,7 +593,7 @@ func cmdVerify(args []string) {
 				status = "enabled"
 			}
 			fmt.Printf("    - %s (%s)\n", name, status)
-			for k, v := range mod.Limits {
+			for k, v := range mod.Metadata {
 				fmt.Printf("        %s = %v\n", k, v)
 			}
 		}

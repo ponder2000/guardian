@@ -41,7 +41,7 @@ func setupTestServer(t *testing.T) (*Server, string, *crypto.KeyPair, []byte) {
 			"rdpms-core": {
 				Enabled:  true,
 				Features: []string{"feature-a"},
-				Limits:   map[string]interface{}{"max_users": float64(50)},
+				Metadata:   map[string]interface{}{"max_users": float64(50)},
 			},
 		},
 	}

@@ -58,7 +58,7 @@ type LicenseResponse struct {
 	Module    string                 `msgpack:"module"`
 	ExpiresAt string                `msgpack:"expires_at"`
 	Features  []string              `msgpack:"features"`
-	Limits    map[string]interface{} `msgpack:"limits"`
+	Metadata  map[string]interface{} `msgpack:"metadata"`
 	Error     string                 `msgpack:"error,omitempty"`
 }
 
