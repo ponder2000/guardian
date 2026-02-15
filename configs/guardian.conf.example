@@ -1,0 +1,28 @@
+# Guardian Daemon Configuration
+# Copy to /etc/guardian/guardian.conf
+
+[daemon]
+socket_path = /var/run/guardian/guardian.sock
+log_path = /var/log/guardian/guardian.log
+log_level = info
+pid_file = /var/run/guardian/guardian.pid
+
+[license]
+license_file = /etc/guardian/guardian.license
+master_pub = /etc/guardian/master.pub
+
+[crypto]
+daemon_key = /etc/guardian/daemon.key
+daemon_pub = /etc/guardian/daemon.pub
+token_db = /etc/guardian/tokens.db
+
+[watchdog]
+hardware_check_interval = 5m
+license_check_interval = 1m
+session_timeout = 30m
+
+[security]
+max_connections = 50
+max_auth_attempts = 3
+auth_timeout = 10s
+nonce_size = 32

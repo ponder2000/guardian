@@ -1,0 +1,22 @@
+[Unit]
+Description=Guardian License Service
+After=network.target
+Before=docker.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/guardiand --config /etc/guardian/guardian.conf
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=3
+WatchdogSec=30
+
+# Security hardening
+ProtectSystem=strict
+ReadWritePaths=/var/run/guardian /var/log/guardian /etc/guardian
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
