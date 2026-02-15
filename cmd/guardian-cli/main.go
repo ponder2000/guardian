@@ -21,6 +21,14 @@ import (
 
 const defaultConfigPath = "/etc/guardian/guardian.conf"
 
+// Set by -ldflags at build time.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+	author    = "unknown"
+)
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -29,9 +37,13 @@ func main() {
 
 	subcommand := os.Args[1]
 
-	// Handle help flag before dispatching
+	// Handle help and version flags before dispatching
 	if subcommand == "-h" || subcommand == "--help" || subcommand == "help" {
 		printUsage()
+		os.Exit(0)
+	}
+	if subcommand == "-v" || subcommand == "--version" || subcommand == "version" {
+		fmt.Printf("guardian-cli %s (commit: %s, built: %s, author: %s)\n", version, commit, buildTime, author)
 		os.Exit(0)
 	}
 

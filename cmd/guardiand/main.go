@@ -20,10 +20,24 @@ import (
 	"github.com/ponder2000/guardian/internal/watchdog"
 )
 
+// Set by -ldflags at build time.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+	author    = "unknown"
+)
+
 func main() {
 	// ── Step 1: Parse --config flag ──────────────────────────────────────
 	configPath := flag.String("config", "/etc/guardian/guardian.conf", "path to guardian config file")
+	showVersion := flag.Bool("version", false, "print version information and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("guardiand %s (commit: %s, built: %s, author: %s)\n", version, commit, buildTime, author)
+		os.Exit(0)
+	}
 
 	// ── Step 2: Load config file ─────────────────────────────────────────
 	cfg, err := config.LoadFile(*configPath)

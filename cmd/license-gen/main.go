@@ -78,6 +78,14 @@ Verify the signature of an existing license file.
 Options:
 `
 
+// Set by -ldflags at build time.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+	author    = "unknown"
+)
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
@@ -97,6 +105,8 @@ func main() {
 		cmdVerify(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
+	case "-v", "--version", "version":
+		fmt.Printf("license-gen %s (commit: %s, built: %s, author: %s)\n", version, commit, buildTime, author)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		fmt.Fprint(os.Stderr, usage)

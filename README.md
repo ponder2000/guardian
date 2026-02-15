@@ -4,37 +4,26 @@ A hardware-bound license enforcement daemon for Linux. Guardian runs as a system
 
 ## Architecture
 
-```
-                         HOST MACHINE
- ┌──────────────────────────────────────────────────────────────┐
- │                                                              │
- │   GUARDIAN DAEMON (systemd)                                  │
- │  ┌────────────────────────────────────────────────────────┐  │
- │  │                                                        │  │
- │  │  ┌─────────────┐ ┌──────────┐ ┌────────────────────┐  │  │
- │  │  │  Hardware    │ │ License  │ │ Auth & Session Mgr │  │  │
- │  │  │  Fingerprint │ │ Vault    │ │ (HMAC + Ed25519)   │  │  │
- │  │  └─────────────┘ └──────────┘ └────────────────────┘  │  │
- │  │                                                        │  │
- │  │  ┌──────────────────────────────────────────────────┐  │  │
- │  │  │    Unix Domain Socket (guardian.sock)             │  │  │
- │  │  └───────────────────┬──────────────────────────────┘  │  │
- │  └──────────────────────┼─────────────────────────────────┘  │
- │                         │                                    │
- │            ┌────────────┴────────────┐                       │
- │            │                         │                       │
- │   ┌────────▼────────┐      ┌────────▼────────┐              │
- │   │ Docker Services │      │ Native Services │              │
- │   │                 │      │                 │              │
- │   │ ┌───────────┐   │      │ ┌───────────┐   │              │
- │   │ │ service_A │   │      │ │ service_C │   │              │
- │   │ └───────────┘   │      │ └───────────┘   │              │
- │   │ ┌───────────┐   │      │ ┌───────────┐   │              │
- │   │ │ service_B │   │      │ │ service_D │   │              │
- │   │ └───────────┘   │      │ └───────────┘   │              │
- │   └─────────────────┘      └─────────────────┘              │
- │                                                              │
- └──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph HOST["HOST MACHINE"]
+        subgraph DAEMON["GUARDIAN DAEMON (systemd)"]
+            HW["Hardware Fingerprint"]
+            LV["License Vault"]
+            AUTH["Auth & Session Mgr\n(HMAC + Ed25519)"]
+            SOCK(["Unix Domain Socket\n(guardian.sock)"])
+        end
+        SOCK --- DOCKER
+        SOCK --- NATIVE
+        subgraph DOCKER["Docker Services"]
+            SA["service_A"]
+            SB["service_B"]
+        end
+        subgraph NATIVE["Native Services"]
+            SC["service_C"]
+            SD["service_D"]
+        end
+    end
 ```
 
 ### How It Works

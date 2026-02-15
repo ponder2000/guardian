@@ -1,8 +1,9 @@
 MODULE       := github.com/ponder2000/guardian
 VERSION      ?= 0.1.0
 COMMIT       := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TIME   := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-LDFLAGS      := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
+BUILD_TIME   := $(shell date '+%Y-%m-%d %H:%M:%S %Z')
+AUTHOR       := Jay Saha
+LDFLAGS      := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X 'main.buildTime=$(BUILD_TIME)' -X 'main.author=$(AUTHOR)'
 
 BINARIES     := guardiand guardian-cli license-gen
 

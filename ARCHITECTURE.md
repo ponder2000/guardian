@@ -4,37 +4,26 @@
 
 Guardian is a Linux daemon that provides hardware-bound license enforcement. It binds a cryptographically signed license to a machine's physical hardware and serves license validation to any local application over a Unix domain socket — whether running natively or inside Docker containers.
 
-```
-                         HOST MACHINE
- ┌──────────────────────────────────────────────────────────────┐
- │                                                              │
- │   GUARDIAN DAEMON (systemd)                                  │
- │  ┌────────────────────────────────────────────────────────┐  │
- │  │                                                        │  │
- │  │  ┌─────────────┐ ┌──────────┐ ┌────────────────────┐  │  │
- │  │  │  Hardware    │ │ License  │ │ Auth & Session Mgr │  │  │
- │  │  │  Fingerprint │ │ Vault    │ │ (HMAC + Ed25519)   │  │  │
- │  │  └─────────────┘ └──────────┘ └────────────────────┘  │  │
- │  │                                                        │  │
- │  │  ┌──────────────────────────────────────────────────┐  │  │
- │  │  │    Unix Domain Socket (guardian.sock)             │  │  │
- │  │  └───────────────────┬──────────────────────────────┘  │  │
- │  └──────────────────────┼─────────────────────────────────┘  │
- │                         │                                    │
- │            ┌────────────┴────────────┐                       │
- │            │                         │                       │
- │   ┌────────▼────────┐      ┌────────▼────────┐              │
- │   │ Docker Services │      │ Native Services │              │
- │   │                 │      │                 │              │
- │   │ ┌───────────┐   │      │ ┌───────────┐   │              │
- │   │ │ service_A │   │      │ │ service_C │   │              │
- │   │ └───────────┘   │      │ └───────────┘   │              │
- │   │ ┌───────────┐   │      │ ┌───────────┐   │              │
- │   │ │ service_B │   │      │ │ service_D │   │              │
- │   │ └───────────┘   │      │ └───────────┘   │              │
- │   └─────────────────┘      └─────────────────┘              │
- │                                                              │
- └──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph HOST["HOST MACHINE"]
+        subgraph DAEMON["GUARDIAN DAEMON (systemd)"]
+            HW["Hardware Fingerprint"]
+            LV["License Vault"]
+            AUTH["Auth & Session Mgr\n(HMAC + Ed25519)"]
+            SOCK(["Unix Domain Socket\n(guardian.sock)"])
+        end
+        SOCK --- DOCKER
+        SOCK --- NATIVE
+        subgraph DOCKER["Docker Services"]
+            SA["service_A"]
+            SB["service_B"]
+        end
+        subgraph NATIVE["Native Services"]
+            SC["service_C"]
+            SD["service_D"]
+        end
+    end
 ```
 
 ---
@@ -43,30 +32,28 @@ Guardian is a Linux daemon that provides hardware-bound license enforcement. It 
 
 Guardian uses a three-tier key hierarchy to establish trust from the license issuer down to individual services:
 
-```
-LICENSE ISSUER (your office)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Master Key Pair (Ed25519)
-  ├── master.priv  →  Never leaves your office
-  └── master.pub   →  Shipped to target machines
-         │
-         │ signs license files
-         ▼
+```mermaid
+graph TD
+    subgraph ISSUER["LICENSE ISSUER (your office)"]
+        MKP["Master Key Pair\n(Ed25519)"]
+        MKP --> MPRIV["master.priv\nNever leaves your office"]
+        MKP --> MPUB["master.pub\nShipped to target machines"]
+    end
 
-TARGET MACHINE (Guardian Daemon)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Daemon Key Pair (Ed25519) — generated on first boot
-  ├── daemon.key  →  Private, stays on machine
-  └── daemon.pub  →  Written into each service's token file
-         │
-         │ proves daemon identity to services
-         ▼
+    MPUB -->|signs license files| DKP
 
-SERVICE TOKENS (per-service, HMAC-SHA256)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Each service receives:
-  ├── TOKEN       →  Shared 256-bit secret for mutual authentication
-  └── DAEMON_PUB  →  Daemon's public key for verifying its signature
+    subgraph TARGET["TARGET MACHINE (Guardian Daemon)"]
+        DKP["Daemon Key Pair\n(Ed25519, generated on first boot)"]
+        DKP --> DKEY["daemon.key\nPrivate, stays on machine"]
+        DKP --> DPUB["daemon.pub\nWritten into each service's token file"]
+    end
+
+    DPUB -->|proves daemon identity| TOKENS
+
+    subgraph TOKENS["SERVICE TOKENS (per-service, HMAC-SHA256)"]
+        TOK["TOKEN\nShared 256-bit secret"]
+        TDPUB["DAEMON_PUB\nDaemon's public key"]
+    end
 ```
 
 **Who holds what:**
@@ -111,12 +98,10 @@ Cloned:   [NEW, NEW, NEW, NEW, NEW]                 →  0/5 FAIL
 A license is a JSON payload signed with Ed25519:
 
 ```
-┌─────────────────────────────────────────────┐
-│  GUARDIAN-LICENSE-V1                          │
-│  PAYLOAD: <base64 encoded JSON>              │
-│  SIGNATURE: <Ed25519 signature>              │
-│  SIGNER: <fingerprint of signing key>        │
-└─────────────────────────────────────────────┘
+GUARDIAN-LICENSE-V1
+PAYLOAD:   <base64 encoded JSON>
+SIGNATURE: <Ed25519 signature>
+SIGNER:    <fingerprint of signing key>
 ```
 
 The JSON payload contains:
@@ -154,13 +139,11 @@ On startup, Guardian verifies the Ed25519 signature, checks hardware fingerprint
 
 All communication happens over a Unix domain socket using a length-prefixed binary format:
 
-```
-┌───────────────┬──────────────┬──────────────────────────────┐
-│ 4 bytes       │ 1 byte       │ N bytes                      │
-│ uint32 BE     │ message type │ msgpack payload               │
-│ total length  │              │ (encrypted post-handshake)    │
-└───────────────┴──────────────┴──────────────────────────────┘
-```
+| Offset | Size | Field |
+|--------|------|-------|
+| 0 | 4 bytes | `uint32 BE` — total message length |
+| 4 | 1 byte | Message type code |
+| 5 | N bytes | msgpack payload (encrypted post-handshake) |
 
 **Message types:**
 
@@ -181,30 +164,22 @@ All communication happens over a Unix domain socket using a length-prefixed bina
 
 The handshake provides mutual authentication — the service verifies the daemon is legitimate, and the daemon verifies the service holds a valid token. Both sides independently derive the same session key without transmitting it.
 
-```
- SERVICE                                            GUARDIAN
-    │                                                   │
-    │──────── Connect to Unix socket ──────────────────▶│
-    │                                                   │
-    │◀──────── GUARDIAN_HELLO ──────────────────────────│
-    │  { guardian_nonce, signature }                    │
-    │                                                   │
-    │  Verify signature using DAEMON_PUB                │
-    │  from token file                                  │
-    │                                                   │
-    │──────── SERVICE_AUTH ────────────────────────────▶│
-    │  { service_id, client_nonce, hmac }              │
-    │                                                   │
-    │         Verify HMAC using stored token            │
-    │         Derive session key                        │
-    │                                                   │
-    │◀──────── AUTH_RESULT ────────────────────────────│
-    │  { status: "ok", session_id }                    │
-    │                                                   │
-    │  ════════ ENCRYPTED CHANNEL (AES-256-GCM) ═══════│
-    │                                                   │
-    │──────── LICENSE_REQUEST (encrypted) ─────────────▶│
-    │◀──────── LICENSE_RESPONSE (encrypted) ───────────│
+```mermaid
+sequenceDiagram
+    participant S as SERVICE
+    participant G as GUARDIAN
+
+    S->>G: Connect to Unix socket
+    G->>S: GUARDIAN_HELLO { guardian_nonce, signature }
+    Note left of S: Verify signature using<br/>DAEMON_PUB from token file
+    S->>G: SERVICE_AUTH { service_id, client_nonce, hmac }
+    Note right of G: Verify HMAC using stored token<br/>Derive session key
+    G->>S: AUTH_RESULT { status: "ok", session_id }
+    rect rgb(200, 220, 255)
+        Note over S,G: ENCRYPTED CHANNEL (AES-256-GCM)
+        S->>G: LICENSE_REQUEST (encrypted)
+        G->>S: LICENSE_RESPONSE (encrypted)
+    end
 ```
 
 **Session key derivation** (computed independently by both sides):
