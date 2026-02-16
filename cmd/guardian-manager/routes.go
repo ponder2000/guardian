@@ -22,6 +22,8 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	hardware := handlers.NewHardware(app.store, tmpl, app.logger)
 	access := handlers.NewAccess(app.store, tmpl, app.logger)
 	licenses := handlers.NewLicenses(app.store, tmpl, app.logger)
+	repository := handlers.NewRepository(app.store, tmpl, app.logger)
+	exportImport := handlers.NewExportImport(app.store, tmpl, app.logger)
 
 	// Route helpers.
 	public := func(h http.HandlerFunc) http.Handler {
@@ -101,6 +103,16 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("GET /licenses/{id}/download", authed(licenses.Download))
 	mux.Handle("POST /licenses/{id}/delete", admin(licenses.Delete))
 
+	// --- Repository ---
+	mux.Handle("GET /repository", authed(repository.Index))
+	mux.Handle("GET /repository/pubkey/{id}", authed(repository.DownloadPubKey))
+	mux.Handle("GET /repository/license/{id}", authed(repository.DownloadLicense))
+
+	// --- Export / Import (admin) ---
+	mux.Handle("GET /export-import", admin(exportImport.Index))
+	mux.Handle("GET /export", admin(exportImport.Export))
+	mux.Handle("POST /import", admin(exportImport.Import))
+
 	// --- Placeholder routes ---
 	placeholder := func(title, active string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +125,5 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 		}
 	}
 
-	mux.Handle("GET /repository", authed(placeholder("Repository", "repository")))
-	mux.Handle("GET /export-import", authed(placeholder("Export / Import", "export-import")))
 	mux.Handle("GET /docs", authed(placeholder("Documentation", "docs")))
 }

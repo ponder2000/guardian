@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -595,5 +596,83 @@ func TestMultipleLicensesForProject(t *testing.T) {
 	lics2, _ := s.ListLicensesForProject(p2.ID)
 	if len(lics2) != 0 {
 		t.Fatalf("expected 0, got %d", len(lics2))
+	}
+}
+
+func TestExportImport(t *testing.T) {
+	s := testStore(t)
+
+	// Create test data.
+	p, _ := s.CreateProject("Export Proj", "desc", "contact", "notes")
+	s.CreateHardwareConfig(p.ID, "HW-Export", "m1", "c1", "mb1", "d1", "n1", "hw notes")
+	s.CreateKeyPair("export-key", "aabbcc", "ddeeff", "fp-exp")
+	u, _ := s.CreateUser("exporter", "exp@test.com", "pass", "viewer")
+	s.GrantAccess(u.ID, p.ID)
+
+	// Export.
+	data, err := s.Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(data.Projects) != 1 || data.Projects[0].Name != "Export Proj" {
+		t.Fatalf("unexpected projects: %+v", data.Projects)
+	}
+	if len(data.Hardware) != 1 || data.Hardware[0].Label != "HW-Export" {
+		t.Fatalf("unexpected hardware: %+v", data.Hardware)
+	}
+	if len(data.KeyPairs) != 1 || data.KeyPairs[0].Name != "export-key" {
+		t.Fatalf("unexpected keys: %+v", data.KeyPairs)
+	}
+	if len(data.Users) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(data.Users))
+	}
+	if len(data.Access) != 1 {
+		t.Fatalf("expected 1 access, got %d", len(data.Access))
+	}
+
+	// Serialize to JSON.
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	// Import into a fresh store.
+	s2 := testStore(t)
+	result, err := s2.Import(jsonBytes)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if result.Projects != 1 {
+		t.Fatalf("expected 1 project imported, got %d", result.Projects)
+	}
+	if result.Hardware != 1 {
+		t.Fatalf("expected 1 hardware imported, got %d", result.Hardware)
+	}
+	if result.Keys != 1 {
+		t.Fatalf("expected 1 key imported, got %d", result.Keys)
+	}
+	if result.Users != 1 {
+		t.Fatalf("expected 1 user imported, got %d", result.Users)
+	}
+	if result.Access != 1 {
+		t.Fatalf("expected 1 access imported, got %d", result.Access)
+	}
+
+	// Verify data is present.
+	projects, _ := s2.ListProjects()
+	if len(projects) != 1 || projects[0].Name != "Export Proj" {
+		t.Fatalf("imported project wrong: %+v", projects)
+	}
+
+	// Import again should skip all (duplicates).
+	result2, err := s2.Import(jsonBytes)
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	if result2.Projects != 0 || result2.Keys != 0 {
+		t.Fatalf("expected 0 new imports on re-import, got projects=%d keys=%d", result2.Projects, result2.Keys)
+	}
+	if result2.Skipped == 0 {
+		t.Fatal("expected some skipped on re-import")
 	}
 }
