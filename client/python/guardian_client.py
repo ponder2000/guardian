@@ -95,6 +95,8 @@ _SESSION_KEY_SUFFIX = b"guardian-session-v1"
 _DEFAULT_SOCKET_PATH = "/var/run/guardian/guardian.sock"
 _DEFAULT_TOKEN_PATH = "/etc/guardian/token"
 _DEFAULT_CHECK_INTERVAL = 300  # seconds
+_STARTUP_RETRY_INITIAL = 0.5   # seconds
+_STARTUP_RETRY_MAX = 5.0       # seconds
 
 
 # ---------------------------------------------------------------------------
@@ -182,9 +184,67 @@ class StatusInfo:
 # ---------------------------------------------------------------------------
 
 
+def _connect_with_retry(
+    socket_path: str,
+    timeout: float,
+    startup_timeout: float = 0,
+) -> socket.socket:
+    """Connect to a Unix domain socket, retrying if *startup_timeout* > 0.
+
+    When the daemon has not started yet the socket file may not exist.
+    This helper retries with exponential backoff until *startup_timeout*
+    seconds have elapsed, then raises :class:`GuardianConnectionError`.
+
+    Returns:
+        A connected :class:`socket.socket`.
+    """
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        sock.connect(socket_path)
+        return sock
+    except OSError as first_err:
+        saved_err = first_err
+        if startup_timeout <= 0:
+            sock.close()
+            raise GuardianConnectionError(
+                f"cannot connect to {socket_path}: {first_err}"
+            ) from first_err
+
+    # Retry loop with exponential backoff.
+    deadline = time.monotonic() + startup_timeout
+    backoff = _STARTUP_RETRY_INITIAL
+    last_err = saved_err
+
+    while time.monotonic() < deadline:
+        if backoff > _STARTUP_RETRY_MAX:
+            backoff = _STARTUP_RETRY_MAX
+        remaining = deadline - time.monotonic()
+        if backoff > remaining:
+            backoff = remaining
+        if backoff > 0:
+            time.sleep(backoff)
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        try:
+            sock.connect(socket_path)
+            return sock
+        except OSError as exc:
+            sock.close()
+            last_err = exc
+
+        backoff *= 2
+
+    raise GuardianConnectionError(
+        f"cannot connect to {socket_path}: timed out after {startup_timeout}s: {last_err}"
+    ) from last_err
+
+
 def check_status(
     socket_path: str = _DEFAULT_SOCKET_PATH,
     timeout: float = 5.0,
+    startup_timeout: float = 0,
 ) -> StatusInfo:
     """Perform an anonymous status check against the Guardian daemon.
 
@@ -195,6 +255,9 @@ def check_status(
     Args:
         socket_path: Path to the Guardian Unix domain socket.
         timeout: Socket timeout in seconds (default 5).
+        startup_timeout: Maximum seconds to wait for the daemon socket to
+            become available (default 0 — fail immediately).  Useful when
+            the daemon may not have started yet.
 
     Returns:
         A populated :class:`StatusInfo` instance.
@@ -203,15 +266,8 @@ def check_status(
         GuardianConnectionError: If the daemon is unreachable.
         GuardianProtocolError: On wire-protocol violations.
     """
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
+    sock = _connect_with_retry(socket_path, timeout, startup_timeout)
     try:
-        try:
-            sock.connect(socket_path)
-        except OSError as exc:
-            raise GuardianConnectionError(
-                f"cannot connect to {socket_path}: {exc}"
-            ) from exc
 
         # Read GUARDIAN_HELLO (skip signature verification — anonymous).
         msg_type, _payload = _read_message(sock)
@@ -522,6 +578,9 @@ class GuardianClient:
             to ``GUARDIAN_TOKEN_PATH``, then to ``/etc/guardian/token``.
         check_interval: Seconds between periodic heartbeat/license checks
             (default 300).
+        startup_timeout: Maximum seconds to wait for the daemon socket to
+            become available when connecting (default 0 — fail immediately).
+            Useful when the daemon may not have started yet.
         valid_handler: Callback ``(details: LicenseDetails) -> None`` invoked
             when a license check succeeds.
         invalid_handler: Callback ``(details: LicenseDetails, error: str) -> None``
@@ -538,6 +597,7 @@ class GuardianClient:
         socket_path: Optional[str] = None,
         token_path: Optional[str] = None,
         check_interval: int = _DEFAULT_CHECK_INTERVAL,
+        startup_timeout: float = 0,
         valid_handler: Optional[Callable[[LicenseDetails], None]] = None,
         invalid_handler: Optional[Callable[[LicenseDetails, str], None]] = None,
     ) -> None:
@@ -554,6 +614,7 @@ class GuardianClient:
             or _DEFAULT_TOKEN_PATH
         )
         self._check_interval = max(1, check_interval)
+        self._startup_timeout = max(0.0, float(startup_timeout))
         self._valid_handler = valid_handler
         self._invalid_handler = invalid_handler
 
@@ -648,7 +709,8 @@ class GuardianClient:
         """Perform an anonymous status check using this client's socket path.
 
         Does not require :meth:`start` to have been called.  No token file
-        or authentication is needed.
+        or authentication is needed.  If a startup timeout is configured, it
+        is used for the connection retry.
 
         Returns:
             A populated :class:`StatusInfo` instance.
@@ -657,7 +719,9 @@ class GuardianClient:
             GuardianConnectionError: If the daemon is unreachable.
             GuardianProtocolError: On wire-protocol violations.
         """
-        return check_status(self._socket_path)
+        return check_status(
+            self._socket_path, startup_timeout=self._startup_timeout
+        )
 
     # ------------------------------------------------------------------
     # Connection management (must hold self._lock)
@@ -673,14 +737,10 @@ class GuardianClient:
 
         creds = self._creds
 
-        # Open Unix socket.
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.connect(self._socket_path)
-        except OSError as exc:
-            raise GuardianConnectionError(
-                f"cannot connect to {self._socket_path}: {exc}"
-            ) from exc
+        # Open Unix socket (with optional startup retry).
+        sock = _connect_with_retry(
+            self._socket_path, timeout=5.0, startup_timeout=self._startup_timeout
+        )
 
         try:
             self._handshake(sock, creds)

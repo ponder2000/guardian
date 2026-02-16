@@ -28,6 +28,8 @@ Commands:
   create    Create a signed license file
   update    Add or modify modules in an existing license file
   verify    Verify a license file signature
+  decode    Decode and display full license contents (JSON)
+  fingerprint  Compute fingerprints from a hardware JSON file
 
 Run 'license-gen <command> -h' for details on each command.
 `
@@ -68,6 +70,35 @@ Examples:
   license-gen update --license=customer.license --sign-with=master.priv \
       --expires=2028-06-30 --output=customer-updated.license
 
+  # Change hardware match threshold:
+  license-gen update --license=customer.license --sign-with=master.priv \
+      --match-threshold=4 --output=customer-updated.license
+
+Options:
+`
+
+const fingerprintUsage = `Usage: license-gen fingerprint [options]
+
+Compute HMAC-SHA256 fingerprints from a hardware JSON file. Provide the salt
+from an existing license (via --license) or supply one directly (via --salt).
+
+Use this to compare against the fingerprints embedded in a license file.
+
+Examples:
+  # Using a license file to extract the salt:
+  license-gen fingerprint --hardware=hardware-info.json --license=customer.license
+
+  # Using a raw salt string:
+  license-gen fingerprint --hardware=hardware-info.json --salt=abc123...
+
+Options:
+`
+
+const decodeUsage = `Usage: license-gen decode [options]
+
+Decode a license file and display its full contents including hardware
+fingerprints, modules, expiry, and all embedded metadata.
+
 Options:
 `
 
@@ -103,6 +134,10 @@ func main() {
 		cmdUpdate(os.Args[2:])
 	case "verify":
 		cmdVerify(os.Args[2:])
+	case "decode":
+		cmdDecode(os.Args[2:])
+	case "fingerprint":
+		cmdFingerprint(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	case "-v", "--version", "version":
@@ -176,6 +211,7 @@ func cmdCreate(args []string) {
 	expiresStr := fs.String("expires", "", "Expiration date in YYYY-MM-DD format")
 	signWith := fs.String("sign-with", "", "Path to master.priv key file")
 	output := fs.String("output", "", "Output path for the .license file")
+	matchThreshold := fs.Int("match-threshold", 3, "Hardware fingerprint match threshold (1-5)")
 
 	var modules moduleFlags
 	fs.Var(&modules, "module", "Module definition: modname:key=val,key=val (repeatable)")
@@ -211,6 +247,12 @@ func cmdCreate(args []string) {
 		os.Exit(1)
 	}
 
+	// Validate match threshold.
+	if *matchThreshold < 1 || *matchThreshold > 5 {
+		fmt.Fprintf(os.Stderr, "Invalid --match-threshold %d: must be between 1 and 5\n", *matchThreshold)
+		os.Exit(1)
+	}
+
 	// Parse expiration date.
 	expiresAt, err := time.Parse("2006-01-02", *expiresStr)
 	if err != nil {
@@ -221,30 +263,10 @@ func cmdCreate(args []string) {
 	expiresAt = expiresAt.UTC().Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 
 	// Read hardware info JSON.
-	hwData, err := os.ReadFile(*hardwarePath)
+	hwInfo, err := loadHardwareJSON(*hardwarePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read hardware file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to load hardware file: %v\n", err)
 		os.Exit(1)
-	}
-
-	var hwJSON struct {
-		MachineID   string `json:"machine_id"`
-		CPU         string `json:"cpu"`
-		Motherboard string `json:"motherboard"`
-		Disk        string `json:"disk"`
-		NIC         string `json:"nic"`
-	}
-	if err := json.Unmarshal(hwData, &hwJSON); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse hardware JSON: %v\n", err)
-		os.Exit(1)
-	}
-
-	hwInfo := &fingerprint.HardwareInfo{
-		MachineID:   hwJSON.MachineID,
-		CPU:         hwJSON.CPU,
-		Motherboard: hwJSON.Motherboard,
-		DiskSerial:  hwJSON.Disk,
-		NICMac:      hwJSON.NIC,
 	}
 
 	// Generate a random salt for fingerprint hashing.
@@ -287,7 +309,7 @@ func cmdCreate(args []string) {
 		Hardware: license.HardwareSpec{
 			Salt:           salt,
 			Fingerprints:   fps,
-			MatchThreshold: 3,
+			MatchThreshold: *matchThreshold,
 		},
 		Modules:      parsedModules,
 		GlobalLimits: map[string]interface{}{},
@@ -390,6 +412,7 @@ func cmdUpdate(args []string) {
 	signWith := fs.String("sign-with", "", "Path to master.priv key file")
 	output := fs.String("output", "", "Output path for the updated .license file")
 	expiresStr := fs.String("expires", "", "New expiration date in YYYY-MM-DD format (optional)")
+	matchThreshold := fs.Int("match-threshold", 0, "New hardware fingerprint match threshold 1-5 (optional, 0=keep current)")
 
 	var modules moduleFlags
 	fs.Var(&modules, "module", "Module definition: modname:key=val,key=val (repeatable)")
@@ -422,8 +445,14 @@ func cmdUpdate(args []string) {
 		os.Exit(1)
 	}
 
-	if len(modules) == 0 && len(disables) == 0 && *expiresStr == "" {
-		fmt.Fprintf(os.Stderr, "Nothing to update: provide --module, --disable, or --expires\n")
+	if len(modules) == 0 && len(disables) == 0 && *expiresStr == "" && *matchThreshold == 0 {
+		fmt.Fprintf(os.Stderr, "Nothing to update: provide --module, --disable, --expires, or --match-threshold\n")
+		os.Exit(1)
+	}
+
+	// Validate match threshold if provided.
+	if *matchThreshold != 0 && (*matchThreshold < 1 || *matchThreshold > 5) {
+		fmt.Fprintf(os.Stderr, "Invalid --match-threshold %d: must be between 1 and 5\n", *matchThreshold)
 		os.Exit(1)
 	}
 
@@ -452,6 +481,12 @@ func cmdUpdate(args []string) {
 		expiresAt = expiresAt.UTC().Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 		lic.ExpiresAt = expiresAt
 		fmt.Printf("  Updated expiration: %s\n", expiresAt.Format(time.RFC3339))
+	}
+
+	// Update match threshold if provided.
+	if *matchThreshold != 0 {
+		lic.Hardware.MatchThreshold = *matchThreshold
+		fmt.Printf("  Updated match threshold: %d\n", *matchThreshold)
 	}
 
 	// Add or modify modules.
@@ -606,6 +641,210 @@ func cmdVerify(args []string) {
 			for k, v := range mod.Metadata {
 				fmt.Printf("        %s = %v\n", k, v)
 			}
+		}
+	}
+}
+
+// cmdDecode decodes a license file and displays its full contents.
+func cmdDecode(args []string) {
+	fs := flag.NewFlagSet("decode", flag.ExitOnError)
+	licensePath := fs.String("license", "", "Path to the .license file")
+	jsonOutput := fs.Bool("json", false, "Output as raw JSON")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, decodeUsage)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	if *licensePath == "" {
+		fmt.Fprintf(os.Stderr, "Missing required flag: --license\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	// Read and parse the license file.
+	licData, err := os.ReadFile(*licensePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read license file: %v\n", err)
+		os.Exit(1)
+	}
+
+	sl, err := license.ParseFile(licData)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse license file: %v\n", err)
+		os.Exit(1)
+	}
+
+	lic := sl.License
+
+	// JSON mode: dump the full license payload as pretty-printed JSON.
+	if *jsonOutput {
+		out, err := json.MarshalIndent(lic, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to marshal license: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(out))
+		return
+	}
+
+	// Human-readable output.
+	fmt.Println("=== License Info ===")
+	fmt.Printf("  License ID:       %s\n", lic.LicenseID)
+	fmt.Printf("  Version:          %d\n", lic.Version)
+	fmt.Printf("  Issued To:        %s\n", lic.IssuedTo)
+	fmt.Printf("  Issued At:        %s\n", lic.IssuedAt.Format(time.RFC3339))
+	fmt.Printf("  Expires At:       %s\n", lic.ExpiresAt.Format(time.RFC3339))
+	fmt.Printf("  Signer FP:        %s\n", sl.SignerFP)
+
+	if err := sl.CheckExpiry(); err != nil {
+		fmt.Printf("  Status:           EXPIRED\n")
+	} else {
+		fmt.Printf("  Days Until Expiry: %d\n", sl.DaysUntilExpiry())
+	}
+
+	fmt.Println()
+	fmt.Println("=== Hardware ===")
+	fmt.Printf("  Salt:             %s\n", lic.Hardware.Salt)
+	fmt.Printf("  Match Threshold:  %d of %d\n", lic.Hardware.MatchThreshold, len(lic.Hardware.Fingerprints))
+	fmt.Println("  Fingerprints:")
+	for _, comp := range fingerprint.AllComponents {
+		if hash, ok := lic.Hardware.Fingerprints[comp]; ok {
+			fmt.Printf("    %-15s %s\n", comp, hash)
+		}
+	}
+
+	if len(lic.Modules) > 0 {
+		fmt.Println()
+		fmt.Println("=== Modules ===")
+		for name, mod := range lic.Modules {
+			status := "disabled"
+			if mod.Enabled {
+				status = "enabled"
+			}
+			fmt.Printf("  [%s] (%s)\n", name, status)
+			if len(mod.Features) > 0 {
+				fmt.Printf("    Features: %s\n", strings.Join(mod.Features, ", "))
+			}
+			for k, v := range mod.Metadata {
+				fmt.Printf("    %s = %v\n", k, v)
+			}
+		}
+	}
+
+	if len(lic.GlobalLimits) > 0 {
+		fmt.Println()
+		fmt.Println("=== Global Limits ===")
+		for k, v := range lic.GlobalLimits {
+			fmt.Printf("  %s = %v\n", k, v)
+		}
+	}
+}
+
+// loadHardwareJSON reads and parses a hardware-info JSON file (both nested
+// "components" format from guardian-cli and flat/legacy format).
+func loadHardwareJSON(path string) (*fingerprint.HardwareInfo, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var hwJSON struct {
+		Components *struct {
+			MachineID   string `json:"machine_id"`
+			CPU         string `json:"cpu"`
+			Motherboard string `json:"motherboard"`
+			Disk        string `json:"disk"`
+			NIC         string `json:"nic"`
+		} `json:"components"`
+
+		MachineID   string `json:"machine_id"`
+		CPU         string `json:"cpu"`
+		Motherboard string `json:"motherboard"`
+		Disk        string `json:"disk"`
+		NIC         string `json:"nic"`
+	}
+	if err := json.Unmarshal(data, &hwJSON); err != nil {
+		return nil, fmt.Errorf("parse hardware JSON: %w", err)
+	}
+
+	if hwJSON.Components != nil {
+		return &fingerprint.HardwareInfo{
+			MachineID:   hwJSON.Components.MachineID,
+			CPU:         hwJSON.Components.CPU,
+			Motherboard: hwJSON.Components.Motherboard,
+			DiskSerial:  hwJSON.Components.Disk,
+			NICMac:      hwJSON.Components.NIC,
+		}, nil
+	}
+	return &fingerprint.HardwareInfo{
+		MachineID:   hwJSON.MachineID,
+		CPU:         hwJSON.CPU,
+		Motherboard: hwJSON.Motherboard,
+		DiskSerial:  hwJSON.Disk,
+		NICMac:      hwJSON.NIC,
+	}, nil
+}
+
+// cmdFingerprint computes and displays fingerprints from a hardware JSON file.
+func cmdFingerprint(args []string) {
+	fs := flag.NewFlagSet("fingerprint", flag.ExitOnError)
+	hardwarePath := fs.String("hardware", "", "Path to hardware-info.json file")
+	licensePath := fs.String("license", "", "Path to .license file (to extract salt)")
+	salt := fs.String("salt", "", "Salt string (alternative to --license)")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, fingerprintUsage)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	if *hardwarePath == "" {
+		fmt.Fprintf(os.Stderr, "Missing required flag: --hardware\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+	if *licensePath == "" && *salt == "" {
+		fmt.Fprintf(os.Stderr, "Provide either --license or --salt\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	// Determine the salt.
+	useSalt := *salt
+	if *licensePath != "" {
+		licData, err := os.ReadFile(*licensePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read license file: %v\n", err)
+			os.Exit(1)
+		}
+		sl, err := license.ParseFile(licData)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse license file: %v\n", err)
+			os.Exit(1)
+		}
+		useSalt = sl.License.Hardware.Salt
+	}
+
+	// Load hardware info.
+	hwInfo, err := loadHardwareJSON(*hardwarePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load hardware file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Compute fingerprints.
+	fps := fingerprint.ComputeFingerprints(hwInfo, useSalt)
+
+	fmt.Println("=== Computed Fingerprints ===")
+	fmt.Printf("  Salt: %s\n\n", useSalt)
+	for _, comp := range fingerprint.AllComponents {
+		hash, ok := fps[comp]
+		if ok {
+			fmt.Printf("  %-15s %s\n", comp, hash)
 		}
 	}
 }

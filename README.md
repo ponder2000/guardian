@@ -41,7 +41,7 @@ graph TD
 |-----------|---------|
 | `guardiand` | Main daemon — listens on Unix socket, validates licenses |
 | `guardian-cli` | Admin CLI — register services, check status, rotate tokens |
-| `license-gen` | License tool — generate master keys, create/update signed licenses |
+| `license-gen` | License tool — generate master keys, create/update/decode/verify signed licenses, compute fingerprints |
 | `client/go` | Go client SDK |
 | `client/python` | Python client SDK |
 | `client/java` | Java client SDK |
@@ -86,10 +86,35 @@ license-gen create \
     --hardware=hardware-info.json \
     --customer="ACME Corp - Production" \
     --expires=2027-02-15 \
+    --match-threshold=3 \
     --module service_A:max_users=50,max_sensors=500 \
     --module service_B:max_cameras=20,max_zones=10 \
     --sign-with=/secure/path/master.priv \
     --output=customer-001.license
+```
+
+#### Decode a license (inspect contents)
+
+```bash
+# Human-readable summary:
+license-gen decode --license=customer-001.license
+
+# Raw JSON output (pipe to jq, store, etc.):
+license-gen decode --license=customer-001.license --json
+```
+
+This displays the full license payload: license ID, customer, dates, hardware fingerprints with salt and match threshold, all modules with metadata, and global limits.
+
+#### Compute fingerprints (debug / compare)
+
+Compute the HMAC-SHA256 fingerprints for a hardware JSON file using the salt from an existing license. Useful for comparing what a machine would produce against what's stored in the license.
+
+```bash
+# Using the salt from a license file:
+license-gen fingerprint --hardware=hardware-info.json --license=customer-001.license
+
+# Using a raw salt string:
+license-gen fingerprint --hardware=hardware-info.json --salt=abc123def456...
 ```
 
 #### Verify a license (optional)
@@ -132,7 +157,15 @@ license-gen update \
     --output=customer-001-updated.license
 ```
 
-You can combine `--module`, `--disable`, and `--expires` in a single command. After updating, deploy the new license file to the target machine and restart the daemon.
+# Change hardware match threshold (1-5, how many hardware components must match):
+license-gen update \
+    --license=customer-001.license \
+    --sign-with=/secure/path/master.priv \
+    --match-threshold=4 \
+    --output=customer-001-updated.license
+```
+
+You can combine `--module`, `--disable`, `--expires`, and `--match-threshold` in a single command. After updating, deploy the new license file to the target machine and restart the daemon.
 
 ---
 
@@ -224,6 +257,8 @@ Every service needs to:
 
 All three SDKs (Go, Python, Java) follow the same pattern: you provide a **module name**, a **check interval**, a **valid handler** (called when the license is OK), and an **invalid handler** (called when it fails). The SDK handles connection, authentication, periodic checking, and reconnection automatically.
 
+**Startup timeout:** All SDKs support a configurable **startup timeout**. When set, the client retries connecting with exponential backoff (500ms initial, 5s max) until the timeout elapses, giving the Guardian daemon time to start. This is useful when your service starts before or concurrently with the daemon (e.g. during system boot). Default is `0` (fail immediately, previous behavior).
+
 **Anonymous status check:** All SDKs also provide a lightweight `checkStatus` / `check_status` function that requires no token or authentication. It connects, sends a `STATUS_REQUEST`, and returns non-sensitive health data (status, license status, expiry days, daemon version, uptime). Useful for health probes and monitoring.
 
 ---
@@ -254,6 +289,7 @@ func main() {
     client := guardian.NewClient(
         guardian.WithModule("service_A"),
         guardian.WithCheckInterval(5 * time.Minute),
+        guardian.WithStartupTimeout(30 * time.Second), // wait up to 30s for daemon
         guardian.WithValidHandler(func(info *guardian.LicenseInfo) {
             log.Printf("License OK — features: %v, expires in %d days",
                 info.Features, info.ExpiresInDays)
@@ -305,8 +341,14 @@ if err != nil {
 fmt.Printf("Status: %s, License: %s, Expires in %d days, Version: %s\n",
     status.Status, status.LicenseStatus, status.ExpiresInDays, status.DaemonVersion)
 
-// Or via a Client instance (uses the client's configured socket path):
-client := guardian.NewClient(guardian.WithSocket("/var/run/guardian/guardian.sock"))
+// With startup timeout — wait up to 30s for daemon to start:
+status, err = guardian.CheckStatus("/var/run/guardian/guardian.sock", 30*time.Second)
+
+// Or via a Client instance (uses the client's configured socket path and startup timeout):
+client := guardian.NewClient(
+    guardian.WithSocket("/var/run/guardian/guardian.sock"),
+    guardian.WithStartupTimeout(30 * time.Second),
+)
 status, err = client.StatusCheck()
 ```
 
@@ -344,6 +386,7 @@ def on_invalid(details, error):
 client = GuardianClient(
     module="service_A",
     check_interval=300,              # seconds (5 minutes)
+    startup_timeout=30,              # wait up to 30s for daemon
     valid_handler=on_valid,
     invalid_handler=on_invalid,
     # Optional overrides (defaults read from env vars):
@@ -375,9 +418,8 @@ status = check_status("/var/run/guardian/guardian.sock")
 print(f"Status: {status.status}, License: {status.license_status}")
 print(f"Expires in {status.expires_in_days} days, Version: {status.daemon_version}")
 
-# Or via a client instance:
-client = GuardianClient(module="unused")
-status = client.status_check()
+# With startup timeout — wait up to 30s for daemon to start:
+status = check_status("/var/run/guardian/guardian.sock", startup_timeout=30)
 ```
 
 **Environment variables** (alternative to constructor args):
@@ -417,6 +459,7 @@ public class MyService {
         GuardianClient guardian = new GuardianClient.Builder()
             .module("service_A")
             .checkInterval(Duration.ofMinutes(5))
+            .startupTimeout(Duration.ofSeconds(30)) // wait up to 30s for daemon
             .onValid(details -> {
                 System.out.println("License OK — features: " + details.getFeatures());
                 System.out.println("  Expires in " + details.getExpiresInDays() + " days");
@@ -458,8 +501,15 @@ System.out.println("License: " + status.getLicenseStatus());
 System.out.println("Expires in " + status.getExpiresInDays() + " days");
 System.out.println("Version: " + status.getDaemonVersion());
 
-// Or via a client instance:
-GuardianClient client = new GuardianClient.Builder().module("unused").build();
+// With startup timeout — wait up to 30s for daemon to start:
+StatusInfo status2 = GuardianClient.checkStatus(
+    "/var/run/guardian/guardian.sock", Duration.ofSeconds(30));
+
+// Or via a client instance (uses configured socket path and startup timeout):
+GuardianClient client = new GuardianClient.Builder()
+    .module("unused")
+    .startupTimeout(Duration.ofSeconds(30))
+    .build();
 StatusInfo info = client.statusCheck();
 ```
 
@@ -487,6 +537,11 @@ sudo journalctl -u guardian -f    # check logs
 ```
 
 If the socket file doesn't exist, the daemon hasn't started. Check logs for license or hardware errors.
+
+If your service starts before the daemon (e.g. during boot), configure a **startup timeout** so the client retries automatically instead of failing immediately:
+- **Go:** `guardian.WithStartupTimeout(30 * time.Second)`
+- **Python:** `startup_timeout=30`
+- **Java:** `.startupTimeout(Duration.ofSeconds(30))`
 
 #### Authentication failed
 
@@ -527,7 +582,7 @@ Guardian Status:
   Hardware: MISMATCH (2/5 components, threshold: 3)
 ```
 
-**Fix:** Significant hardware changes require a new license. Export the new hardware info and request a re-issued license:
+**Fix:** Significant hardware changes require a new license. You can also lower the match threshold (e.g. to 2) to tolerate more changes, or export new hardware info and request a re-issued license:
 ```bash
 sudo guardian-cli export-hardware > new-hardware.json
 # Send to license issuer, get a new .license file, then:
