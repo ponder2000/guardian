@@ -28,6 +28,7 @@ coverage.html
 Thumbs.db
 
 # Secrets (never commit)
+secret/
 *.priv
 *.key
 daemon.key

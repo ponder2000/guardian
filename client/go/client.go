@@ -41,6 +41,10 @@ const (
 	defaultTokenPath     = "/etc/guardian/token"
 	defaultCheckInterval = 5 * time.Minute
 	clientNonceSize      = 32
+
+	// Startup timeout retry defaults
+	startupRetryInitial = 500 * time.Millisecond
+	startupRetryMax     = 5 * time.Second
 )
 
 // ValidHandler is called when a periodic or forced license check succeeds.
@@ -56,6 +60,7 @@ type Client struct {
 	tokenPath      string
 	module         string
 	checkInterval  time.Duration
+	startupTimeout time.Duration
 	validHandler   ValidHandler
 	invalidHandler InvalidHandler
 	conn           net.Conn
@@ -156,6 +161,17 @@ func WithCheckInterval(d time.Duration) Option {
 	}
 }
 
+// WithStartupTimeout returns an Option that sets how long Connect will keep
+// retrying when the Guardian daemon socket is not yet available (e.g. the
+// daemon has not started). The client retries with exponential backoff
+// (500ms initial, 5s max) until the timeout elapses. A value of 0 (the
+// default) means no retry — Connect fails immediately on connection error.
+func WithStartupTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		c.startupTimeout = d
+	}
+}
+
 // WithValidHandler returns an Option that registers a callback invoked
 // whenever a periodic or forced license check succeeds.
 func WithValidHandler(h ValidHandler) Option {
@@ -175,6 +191,10 @@ func WithInvalidHandler(h InvalidHandler) Option {
 // Connect establishes a connection to the Guardian daemon and performs the
 // mutual authentication handshake. After a successful call the client is
 // ready for encrypted communication (CheckLicense, Heartbeat).
+//
+// If a startup timeout is configured (see WithStartupTimeout), Connect
+// retries with exponential backoff when the daemon socket is not yet
+// available, giving the daemon time to start.
 func (c *Client) Connect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -197,10 +217,10 @@ func (c *Client) Connect() error {
 	}
 	daemonPub := ed25519.PublicKey(daemonPubBytes)
 
-	// Step 2: Dial the Unix domain socket.
-	conn, err := net.Dial("unix", c.socketPath)
+	// Step 2: Dial the Unix domain socket (with optional startup retry).
+	conn, err := c.dialWithRetry()
 	if err != nil {
-		return fmt.Errorf("guardian: connect to %s: %w", c.socketPath, err)
+		return err
 	}
 
 	// Step 3: Read GUARDIAN_HELLO and verify the daemon's signature.
@@ -277,6 +297,45 @@ func (c *Client) Connect() error {
 	return nil
 }
 
+// dialWithRetry attempts to dial the Unix socket, retrying with exponential
+// backoff if a startup timeout is configured and the error is a connection
+// error (socket not found, connection refused). Caller must hold c.mu.
+func (c *Client) dialWithRetry() (net.Conn, error) {
+	conn, err := net.Dial("unix", c.socketPath)
+	if err == nil || c.startupTimeout <= 0 {
+		if err != nil {
+			return nil, fmt.Errorf("guardian: connect to %s: %w", c.socketPath, err)
+		}
+		return conn, nil
+	}
+
+	deadline := time.Now().Add(c.startupTimeout)
+	backoff := startupRetryInitial
+
+	for time.Now().Before(deadline) {
+		if backoff > startupRetryMax {
+			backoff = startupRetryMax
+		}
+		// Don't sleep past the deadline.
+		remaining := time.Until(deadline)
+		if backoff > remaining {
+			backoff = remaining
+		}
+
+		time.Sleep(backoff)
+
+		conn, err = net.Dial("unix", c.socketPath)
+		if err == nil {
+			return conn, nil
+		}
+
+		backoff *= 2
+	}
+
+	return nil, fmt.Errorf("guardian: connect to %s: timed out after %s: %w",
+		c.socketPath, c.startupTimeout, err)
+}
+
 // Close shuts down the connection to the Guardian daemon.
 func (c *Client) Close() error {
 	c.mu.Lock()
@@ -292,11 +351,53 @@ func (c *Client) Close() error {
 	return err
 }
 
+// dialUntilReady dials a Unix socket, retrying with exponential backoff when
+// startupTimeout > 0 and the connection fails. Used by CheckStatus.
+func dialUntilReady(network, address string, dialTimeout, startupTimeout time.Duration) (net.Conn, error) {
+	conn, err := net.DialTimeout(network, address, dialTimeout)
+	if err == nil || startupTimeout <= 0 {
+		return conn, err
+	}
+
+	deadline := time.Now().Add(startupTimeout)
+	backoff := startupRetryInitial
+
+	for time.Now().Before(deadline) {
+		if backoff > startupRetryMax {
+			backoff = startupRetryMax
+		}
+		remaining := time.Until(deadline)
+		if backoff > remaining {
+			backoff = remaining
+		}
+
+		time.Sleep(backoff)
+
+		conn, err = net.DialTimeout(network, address, dialTimeout)
+		if err == nil {
+			return conn, nil
+		}
+
+		backoff *= 2
+	}
+
+	return nil, err
+}
+
 // CheckStatus performs an anonymous status check against the Guardian daemon at
 // the given socket path. It does not require a token file or authentication.
 // The connection is closed after the response is received.
-func CheckStatus(socketPath string) (*StatusInfo, error) {
-	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+//
+// An optional startupTimeout can be provided (only the first value is used).
+// When set, CheckStatus retries the connection with exponential backoff until
+// the timeout elapses, giving the daemon time to start.
+func CheckStatus(socketPath string, startupTimeout ...time.Duration) (*StatusInfo, error) {
+	timeout := time.Duration(0)
+	if len(startupTimeout) > 0 {
+		timeout = startupTimeout[0]
+	}
+
+	conn, err := dialUntilReady("unix", socketPath, 5*time.Second, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("guardian: connect to %s: %w", socketPath, err)
 	}
@@ -346,8 +447,9 @@ func CheckStatus(socketPath string) (*StatusInfo, error) {
 
 // StatusCheck performs an anonymous status check using the client's configured
 // socket path. It does not require Connect() to have been called.
+// If a startup timeout is configured, it is used for the connection retry.
 func (c *Client) StatusCheck() (*StatusInfo, error) {
-	return CheckStatus(c.socketPath)
+	return CheckStatus(c.socketPath, c.startupTimeout)
 }
 
 // IsConnected returns true if the client has an active authenticated connection.

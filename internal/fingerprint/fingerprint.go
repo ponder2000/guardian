@@ -89,27 +89,74 @@ func CPUInfo() (string, error) {
 	return fmt.Sprintf("%s x%d", modelName, processorCount), nil
 }
 
-// MotherboardSerial reads the board serial from sysfs.
-// Falls back to "unknown" on any error.
-func MotherboardSerial() (string, error) {
-	data, err := os.ReadFile("/sys/devices/virtual/dmi/id/board_serial")
-	if err != nil {
-		return "unknown", nil
-	}
-	serial := strings.TrimSpace(string(data))
-	if serial == "" {
-		return "unknown", nil
-	}
-	return serial, nil
+// dmiPlaceholders contains common BIOS placeholder values that should be
+// treated as missing/unknown.
+var dmiPlaceholders = []string{
+	"default string",
+	"to be filled by o.e.m.",
+	"not specified",
+	"not available",
+	"none",
+	"n/a",
+	"unknown",
+	"system serial number",
+	"chassis serial number",
+	"base board serial number",
 }
 
-// DiskSerial tries to read the serial for sda, vda, or nvme0n1.
+// isDMIPlaceholder reports whether a DMI value is a known placeholder.
+func isDMIPlaceholder(s string) bool {
+	lower := strings.ToLower(strings.TrimSpace(s))
+	for _, p := range dmiPlaceholders {
+		if lower == p {
+			return true
+		}
+	}
+	return false
+}
+
+// readDMIField tries to read a sysfs DMI field, returning "" if the file
+// is missing, unreadable, empty, or contains a known placeholder value.
+func readDMIField(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	val := strings.TrimSpace(string(data))
+	if val == "" || isDMIPlaceholder(val) {
+		return ""
+	}
+	return val
+}
+
+// MotherboardSerial reads the board identity from sysfs, trying several
+// DMI fields in order of specificity. Falls back to "unknown" when none
+// yield a usable value.
+func MotherboardSerial() (string, error) {
+	candidates := []string{
+		"/sys/devices/virtual/dmi/id/board_serial",
+		"/sys/devices/virtual/dmi/id/product_serial",
+		"/sys/devices/virtual/dmi/id/board_name",
+		"/sys/devices/virtual/dmi/id/product_name",
+	}
+	for _, path := range candidates {
+		if val := readDMIField(path); val != "" {
+			return val, nil
+		}
+	}
+	return "unknown", nil
+}
+
+// DiskSerial tries to read the serial for common block devices including
+// SCSI/SATA (sda), virtio (vda), NVMe (nvme0n1), and eMMC (mmcblk0).
 // Falls back to "unknown" if none are found.
 func DiskSerial() (string, error) {
+	// Static candidates — covers the most common device names.
 	candidates := []string{
 		"/sys/block/sda/device/serial",
 		"/sys/block/vda/device/serial",
 		"/sys/block/nvme0n1/device/serial",
+		"/sys/block/mmcblk0/device/serial",
 	}
 	for _, path := range candidates {
 		data, err := os.ReadFile(path)
@@ -120,6 +167,45 @@ func DiskSerial() (string, error) {
 			}
 		}
 	}
+
+	// Dynamic scan — look for any block device with a serial.
+	entries, err := os.ReadDir("/sys/block")
+	if err != nil {
+		return "unknown", nil
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		// Skip loopback and ram devices.
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") {
+			continue
+		}
+		path := filepath.Join("/sys/block", name, "device", "serial")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			serial := strings.TrimSpace(string(data))
+			if serial != "" {
+				return serial, nil
+			}
+		}
+	}
+
+	// Last resort: try the eMMC CID (unique per chip) for mmcblk devices.
+	entries2, _ := os.ReadDir("/sys/block")
+	for _, entry := range entries2 {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "mmcblk") {
+			continue
+		}
+		cidPath := filepath.Join("/sys/block", name, "device", "cid")
+		data, err := os.ReadFile(cidPath)
+		if err == nil {
+			cid := strings.TrimSpace(string(data))
+			if cid != "" {
+				return cid, nil
+			}
+		}
+	}
+
 	return "unknown", nil
 }
 

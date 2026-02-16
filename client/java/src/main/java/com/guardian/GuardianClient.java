@@ -128,11 +128,18 @@ public class GuardianClient implements AutoCloseable {
             0x70, 0x03, 0x21, 0x00
     };
 
+    /** Startup retry backoff: initial delay. */
+    private static final long STARTUP_RETRY_INITIAL_MS = 500;
+
+    /** Startup retry backoff: maximum delay. */
+    private static final long STARTUP_RETRY_MAX_MS = 5000;
+
     // ---- Instance fields ----
     private final String module;
     private final String socketPath;
     private final String tokenPath;
     private final Duration checkInterval;
+    private final Duration startupTimeout;
     private final ValidHandler onValid;
     private final InvalidHandler onInvalid;
 
@@ -347,6 +354,7 @@ public class GuardianClient implements AutoCloseable {
         private String socketPath;
         private String tokenPath;
         private Duration checkInterval = Duration.ofMinutes(5);
+        private Duration startupTimeout = Duration.ZERO;
         private ValidHandler onValid;
         private InvalidHandler onInvalid;
 
@@ -403,6 +411,24 @@ public class GuardianClient implements AutoCloseable {
         }
 
         /**
+         * Sets the startup timeout — how long {@link #start()} (and
+         * {@link #checkStatus(String)}) will retry connecting when the daemon
+         * socket is not yet available.  The client retries with exponential
+         * backoff (500ms initial, 5s max) until the timeout elapses.
+         * Default is {@link Duration#ZERO} (no retry — fail immediately).
+         *
+         * @param timeout the maximum time to wait for the daemon to start
+         * @return this builder
+         */
+        public Builder startupTimeout(Duration timeout) {
+            this.startupTimeout = Objects.requireNonNull(timeout, "startupTimeout must not be null");
+            if (timeout.isNegative()) {
+                throw new IllegalArgumentException("startupTimeout must not be negative");
+            }
+            return this;
+        }
+
+        /**
          * Registers the callback invoked when a license check confirms the license is valid.
          *
          * @param handler the valid-license handler
@@ -448,7 +474,7 @@ public class GuardianClient implements AutoCloseable {
             }
 
             return new GuardianClient(module, resolvedSocket, resolvedToken,
-                    checkInterval, onValid, onInvalid);
+                    checkInterval, startupTimeout, onValid, onInvalid);
         }
     }
 
@@ -457,11 +483,13 @@ public class GuardianClient implements AutoCloseable {
     // -----------------------------------------------------------------------
 
     private GuardianClient(String module, String socketPath, String tokenPath,
-                           Duration checkInterval, ValidHandler onValid, InvalidHandler onInvalid) {
+                           Duration checkInterval, Duration startupTimeout,
+                           ValidHandler onValid, InvalidHandler onInvalid) {
         this.module = module;
         this.socketPath = socketPath;
         this.tokenPath = tokenPath;
         this.checkInterval = checkInterval;
+        this.startupTimeout = startupTimeout;
         this.onValid = onValid;
         this.onInvalid = onInvalid;
     }
@@ -576,11 +604,23 @@ public class GuardianClient implements AutoCloseable {
      * @throws GuardianException if the check fails
      */
     public static StatusInfo checkStatus(String socketPath) throws GuardianException {
+        return checkStatus(socketPath, Duration.ZERO);
+    }
+
+    /**
+     * Performs an anonymous status check, retrying the connection with
+     * exponential backoff for up to {@code startupTimeout} when the daemon
+     * socket is not yet available.
+     *
+     * @param socketPath     path to the Guardian Unix domain socket
+     * @param startupTimeout maximum time to wait for the daemon to start
+     * @return the daemon's status information
+     * @throws GuardianException if the check fails
+     */
+    public static StatusInfo checkStatus(String socketPath, Duration startupTimeout) throws GuardianException {
         SocketChannel channel = null;
         try {
-            SocketAddress addr = UnixDomainSocketAddress.of(socketPath);
-            channel = SocketChannel.open(addr);
-            channel.configureBlocking(true);
+            channel = openChannelWithRetry(socketPath, startupTimeout);
             InputStream in = Channels.newInputStream(channel);
             OutputStream out = Channels.newOutputStream(channel);
 
@@ -654,14 +694,66 @@ public class GuardianClient implements AutoCloseable {
 
     /**
      * Convenience method that performs an anonymous status check using this
-     * client's configured socket path. Does not require {@link #start()} to
-     * have been called.
+     * client's configured socket path and startup timeout. Does not require
+     * {@link #start()} to have been called.
      *
      * @return the daemon's status information
      * @throws GuardianException if the check fails
      */
     public StatusInfo statusCheck() throws GuardianException {
-        return checkStatus(this.socketPath);
+        return checkStatus(this.socketPath, this.startupTimeout);
+    }
+
+    /**
+     * Opens a {@link SocketChannel} to the given Unix socket path, retrying
+     * with exponential backoff when {@code startupTimeout} is positive.
+     */
+    private static SocketChannel openChannelWithRetry(String socketPath, Duration startupTimeout)
+            throws GuardianException {
+        SocketAddress addr = UnixDomainSocketAddress.of(socketPath);
+        IOException lastError;
+        try {
+            SocketChannel ch = SocketChannel.open(addr);
+            ch.configureBlocking(true);
+            return ch;
+        } catch (IOException e) {
+            if (startupTimeout == null || startupTimeout.isZero()) {
+                throw new GuardianException("Status check failed: " + e.getMessage(), e);
+            }
+            lastError = e;
+        }
+
+        long deadlineMs = System.currentTimeMillis() + startupTimeout.toMillis();
+        long backoffMs = STARTUP_RETRY_INITIAL_MS;
+
+        while (System.currentTimeMillis() < deadlineMs) {
+            if (backoffMs > STARTUP_RETRY_MAX_MS) {
+                backoffMs = STARTUP_RETRY_MAX_MS;
+            }
+            long remaining = deadlineMs - System.currentTimeMillis();
+            long sleepMs = Math.min(backoffMs, remaining);
+            if (sleepMs > 0) {
+                try {
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new GuardianException(
+                            "Interrupted while waiting for Guardian daemon at " + socketPath, ie);
+                }
+            }
+            try {
+                SocketChannel ch = SocketChannel.open(addr);
+                ch.configureBlocking(true);
+                return ch;
+            } catch (IOException e) {
+                lastError = e;
+            }
+            backoffMs *= 2;
+        }
+
+        throw new GuardianException(
+                "Status check failed: timed out after " + startupTimeout.toSeconds() +
+                        "s waiting for " + socketPath, lastError);
     }
 
     /**
@@ -758,17 +850,61 @@ public class GuardianClient implements AutoCloseable {
 
     /**
      * Opens a Unix domain socket connection to the Guardian daemon.
+     * If a startup timeout is configured, retries with exponential backoff.
      */
     private void connect() throws GuardianException {
+        IOException lastError;
         try {
             SocketAddress addr = UnixDomainSocketAddress.of(socketPath);
             socketChannel = SocketChannel.open(addr);
             socketChannel.configureBlocking(true);
             inputStream = Channels.newInputStream(socketChannel);
             outputStream = Channels.newOutputStream(socketChannel);
+            return;
         } catch (IOException e) {
-            throw new GuardianException("Failed to connect to Guardian daemon at " + socketPath, e);
+            if (startupTimeout == null || startupTimeout.isZero()) {
+                throw new GuardianException("Failed to connect to Guardian daemon at " + socketPath, e);
+            }
+            lastError = e;
         }
+
+        // Retry with exponential backoff until startupTimeout elapses.
+        long deadlineMs = System.currentTimeMillis() + startupTimeout.toMillis();
+        long backoffMs = STARTUP_RETRY_INITIAL_MS;
+
+        while (System.currentTimeMillis() < deadlineMs) {
+            if (backoffMs > STARTUP_RETRY_MAX_MS) {
+                backoffMs = STARTUP_RETRY_MAX_MS;
+            }
+            long remaining = deadlineMs - System.currentTimeMillis();
+            long sleepMs = Math.min(backoffMs, remaining);
+            if (sleepMs > 0) {
+                try {
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new GuardianException(
+                            "Interrupted while waiting for Guardian daemon at " + socketPath, ie);
+                }
+            }
+
+            try {
+                SocketAddress addr = UnixDomainSocketAddress.of(socketPath);
+                socketChannel = SocketChannel.open(addr);
+                socketChannel.configureBlocking(true);
+                inputStream = Channels.newInputStream(socketChannel);
+                outputStream = Channels.newOutputStream(socketChannel);
+                return;
+            } catch (IOException e) {
+                lastError = e;
+            }
+
+            backoffMs *= 2;
+        }
+
+        throw new GuardianException(
+                "Failed to connect to Guardian daemon at " + socketPath +
+                        ": timed out after " + startupTimeout.toSeconds() + "s", lastError);
     }
 
     /**

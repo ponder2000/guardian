@@ -1,5 +1,5 @@
 MODULE       := github.com/ponder2000/guardian
-VERSION      ?= 0.1.0
+VERSION      ?= 0.2.0
 COMMIT       := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME   := $(shell date '+%Y-%m-%d %H:%M:%S %Z')
 AUTHOR       := Jay Saha

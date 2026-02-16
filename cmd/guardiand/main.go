@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/ponder2000/guardian/internal/auth"
 	"github.com/ponder2000/guardian/internal/config"
@@ -217,7 +220,9 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 
-	// ── Step 12: Log "Guardian daemon started" and block ─────────────────
+	// ── Step 12: Notify systemd and log "Guardian daemon started" ────────
+	sdStopCh := make(chan struct{})
+	sdNotify(logger, sdStopCh)
 	logger.Println("Guardian daemon started")
 
 	for {
@@ -256,6 +261,7 @@ func main() {
 
 		case syscall.SIGTERM, syscall.SIGINT:
 			logger.Printf("received %s, shutting down", sig)
+			close(sdStopCh)
 			wd.Stop()
 			srv.Stop()
 			if err := tokenStore.Save(); err != nil {
@@ -265,4 +271,59 @@ func main() {
 			return
 		}
 	}
+}
+
+// sdNotify sends a readiness notification to systemd and starts a background
+// goroutine that sends periodic WATCHDOG=1 heartbeats if WatchdogSec is
+// configured. This is a no-op when NOTIFY_SOCKET is unset.
+func sdNotify(logger *log.Logger, stopCh <-chan struct{}) {
+	sockAddr := os.Getenv("NOTIFY_SOCKET")
+	if sockAddr == "" {
+		return
+	}
+
+	// Send READY=1
+	if err := sdSend(sockAddr, "READY=1"); err != nil {
+		logger.Printf("sd_notify: ready: %v", err)
+		return
+	}
+
+	// Parse WATCHDOG_USEC to determine heartbeat interval.
+	usecStr := os.Getenv("WATCHDOG_USEC")
+	if usecStr == "" {
+		return
+	}
+	usec, err := strconv.ParseUint(usecStr, 10, 64)
+	if err != nil || usec == 0 {
+		return
+	}
+
+	// Notify at half the watchdog interval (recommended by sd_watchdog_enabled(3)).
+	interval := time.Duration(usec) * time.Microsecond / 2
+	logger.Printf("sd_notify: watchdog heartbeat every %s", interval)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				if err := sdSend(sockAddr, "WATCHDOG=1"); err != nil {
+					logger.Printf("sd_notify: watchdog: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+func sdSend(sockAddr, msg string) error {
+	conn, err := net.Dial("unixgram", sockAddr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte(msg))
+	return err
 }
