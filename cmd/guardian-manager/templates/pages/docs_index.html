@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Documentation</h1>
+    <p class="mt-1 text-sm text-gray-500">Reference guides for Guardian components and integrations.</p>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl">
+    <a href="/docs/cli" class="block rounded-lg bg-white p-6 shadow border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="flex-shrink-0 rounded-lg bg-indigo-50 p-2">
+                <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+            </div>
+            <h2 class="text-sm font-semibold text-gray-900">CLI Reference</h2>
+        </div>
+        <p class="text-sm text-gray-500">Commands for guardian-cli and license-gen tools: status, register, create licenses, verify, and more.</p>
+    </a>
+
+    <a href="/docs/sdk" class="block rounded-lg bg-white p-6 shadow border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="flex-shrink-0 rounded-lg bg-green-50 p-2">
+                <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"/></svg>
+            </div>
+            <h2 class="text-sm font-semibold text-gray-900">Client SDKs</h2>
+        </div>
+        <p class="text-sm text-gray-500">Integration guides for Go, Python, and Java client libraries with examples and configuration options.</p>
+    </a>
+
+    <a href="/docs/architecture" class="block rounded-lg bg-white p-6 shadow border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="flex-shrink-0 rounded-lg bg-amber-50 p-2">
+                <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z"/></svg>
+            </div>
+            <h2 class="text-sm font-semibold text-gray-900">Architecture</h2>
+        </div>
+        <p class="text-sm text-gray-500">System design, security model, wire protocol, hardware fingerprinting, and deployment patterns.</p>
+    </a>
+</div>
+{{end}}

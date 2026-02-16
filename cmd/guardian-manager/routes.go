@@ -113,17 +113,10 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("GET /export", admin(exportImport.Export))
 	mux.Handle("POST /import", admin(exportImport.Import))
 
-	// --- Placeholder routes ---
-	placeholder := func(title, active string) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			user := UserFromContext(r.Context())
-			data := handlers.PageData{
-				Title: title, Active: active, User: user,
-				CSRFToken: CSRFTokenFromContext(r.Context()),
-			}
-			tmpl.RenderPage(w, "placeholder", "base", data)
-		}
-	}
-
-	mux.Handle("GET /docs", authed(placeholder("Documentation", "docs")))
+	// --- Docs ---
+	docs := handlers.NewDocs(app.store, tmpl, app.logger)
+	mux.Handle("GET /docs", authed(docs.Index))
+	mux.Handle("GET /docs/cli", authed(docs.CLI))
+	mux.Handle("GET /docs/sdk", authed(docs.SDK))
+	mux.Handle("GET /docs/architecture", authed(docs.Architecture))
 }
