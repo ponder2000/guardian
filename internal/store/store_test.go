@@ -291,6 +291,137 @@ func TestDuplicateKeyName(t *testing.T) {
 	}
 }
 
+func TestProjectCRUD(t *testing.T) {
+	s := testStore(t)
+
+	p, err := s.CreateProject("ACME Corp", "A test project", "john@acme.com", "notes")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if p.Name != "ACME Corp" || !p.IsActive {
+		t.Fatalf("unexpected project: %+v", p)
+	}
+
+	projects, _ := s.ListProjects()
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(projects))
+	}
+
+	s.UpdateProject(p.ID, "ACME Updated", "desc", "contact", "notes", true)
+	p2, _ := s.GetProject(p.ID)
+	if p2.Name != "ACME Updated" {
+		t.Fatalf("update didn't apply: %s", p2.Name)
+	}
+
+	s.DeleteProject(p.ID)
+	_, err = s.GetProject(p.ID)
+	if err == nil {
+		t.Fatal("expected error for deleted project")
+	}
+}
+
+func TestHardwareConfigCRUD(t *testing.T) {
+	s := testStore(t)
+
+	p, _ := s.CreateProject("HW Test", "", "", "")
+	hw, err := s.CreateHardwareConfig(p.ID, "Server #1", "machine123", "Intel x8", "Board1", "disk-abc", "aa:bb:cc:dd:ee:ff", "test hw")
+	if err != nil {
+		t.Fatalf("create hw: %v", err)
+	}
+	if hw.Label != "Server #1" || hw.ProjectName != "HW Test" {
+		t.Fatalf("unexpected hw: %+v", hw)
+	}
+
+	configs, _ := s.ListHardwareForProject(p.ID)
+	if len(configs) != 1 {
+		t.Fatalf("expected 1, got %d", len(configs))
+	}
+
+	s.UpdateHardwareConfig(hw.ID, "Server #1 Updated", "m2", "cpu2", "mb2", "d2", "n2", "n")
+	hw2, _ := s.GetHardwareConfig(hw.ID)
+	if hw2.Label != "Server #1 Updated" {
+		t.Fatal("update didn't apply")
+	}
+
+	allHw, _ := s.ListHardwareConfigs()
+	if len(allHw) != 1 {
+		t.Fatalf("expected 1 in all, got %d", len(allHw))
+	}
+
+	s.DeleteHardwareConfig(hw.ID)
+	_, err = s.GetHardwareConfig(hw.ID)
+	if err == nil {
+		t.Fatal("expected error for deleted hw")
+	}
+}
+
+func TestAccessControl(t *testing.T) {
+	s := testStore(t)
+
+	u, _ := s.CreateUser("viewer1", "v@test.com", "pass", "viewer")
+	p, _ := s.CreateProject("AccessProj", "", "", "")
+
+	// No access initially.
+	if s.HasAccess(u.ID, p.ID) {
+		t.Fatal("should not have access")
+	}
+
+	viewerProjects, _ := s.ListProjectsForUser(u.ID)
+	if len(viewerProjects) != 0 {
+		t.Fatalf("expected 0 projects for viewer, got %d", len(viewerProjects))
+	}
+
+	// Grant.
+	s.GrantAccess(u.ID, p.ID)
+	if !s.HasAccess(u.ID, p.ID) {
+		t.Fatal("should have access after grant")
+	}
+
+	viewerProjects, _ = s.ListProjectsForUser(u.ID)
+	if len(viewerProjects) != 1 {
+		t.Fatalf("expected 1 project for viewer, got %d", len(viewerProjects))
+	}
+
+	access, _ := s.ListAllAccess()
+	if len(access) != 1 {
+		t.Fatalf("expected 1 access entry, got %d", len(access))
+	}
+
+	// Revoke.
+	s.RevokeAccess(u.ID, p.ID)
+	if s.HasAccess(u.ID, p.ID) {
+		t.Fatal("should not have access after revoke")
+	}
+
+	// Double grant is idempotent.
+	s.GrantAccess(u.ID, p.ID)
+	s.GrantAccess(u.ID, p.ID)
+	access2, _ := s.ListAllAccess()
+	if len(access2) != 1 {
+		t.Fatalf("expected 1 after double grant, got %d", len(access2))
+	}
+}
+
+func TestHardwareCascadeOnProjectDelete(t *testing.T) {
+	s := testStore(t)
+
+	p, _ := s.CreateProject("Cascade", "", "", "")
+	s.CreateHardwareConfig(p.ID, "HW1", "", "", "", "", "", "")
+	s.CreateHardwareConfig(p.ID, "HW2", "", "", "", "", "", "")
+
+	configs, _ := s.ListHardwareForProject(p.ID)
+	if len(configs) != 2 {
+		t.Fatalf("expected 2 configs, got %d", len(configs))
+	}
+
+	s.DeleteProject(p.ID)
+
+	configs2, _ := s.ListHardwareForProject(p.ID)
+	if len(configs2) != 0 {
+		t.Fatalf("expected 0 after cascade, got %d", len(configs2))
+	}
+}
+
 func TestDisabledUserSession(t *testing.T) {
 	s := testStore(t)
 

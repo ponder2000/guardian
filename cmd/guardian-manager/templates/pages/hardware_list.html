@@ -1,0 +1,57 @@
+{{define "content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Hardware Configurations</h1>
+        <p class="mt-1 text-sm text-gray-500">All hardware configs across projects.</p>
+    </div>
+    {{if isAdmin .User.Role}}
+    <a href="/hardware/new" class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        New Hardware Config
+    </a>
+    {{end}}
+</div>
+
+<div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Label</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Machine ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPU</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIC MAC</th>
+                {{if isAdmin .User.Role}}
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                {{end}}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+            {{range .Configs}}
+            <tr>
+                <td class="px-4 py-3 text-sm">
+                    <a href="/projects/{{.ProjectID}}" class="text-indigo-600 hover:text-indigo-500">{{.ProjectName}}</a>
+                </td>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{.Label}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{if .MachineID}}{{printf "%.16s" .MachineID}}...{{else}}-{{end}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{{if .CPU}}{{.CPU}}{{else}}-{{end}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{if .NICMac}}{{.NICMac}}{{else}}-{{end}}</td>
+                {{if isAdmin $.User.Role}}
+                <td class="px-4 py-3 text-sm text-right space-x-2">
+                    <a href="/hardware/{{.ID}}/edit" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                    <form method="POST" action="/hardware/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete?')">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
+                    </form>
+                </td>
+                {{end}}
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No hardware configurations found.</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
