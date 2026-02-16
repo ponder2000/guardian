@@ -224,6 +224,73 @@ func TestUserCount(t *testing.T) {
 	}
 }
 
+func TestKeyPairCRUD(t *testing.T) {
+	s := testStore(t)
+
+	// Create key pair.
+	kp, err := s.CreateKeyPair("test-key", "aabbccdd", "11223344aabbccdd", "fp123")
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	if kp.Name != "test-key" || !kp.IsDefault {
+		t.Fatalf("unexpected key: %+v", kp)
+	}
+
+	// First key should be default.
+	def, err := s.GetDefaultKeyPair()
+	if err != nil {
+		t.Fatalf("get default: %v", err)
+	}
+	if def.ID != kp.ID {
+		t.Fatal("first key should be default")
+	}
+
+	// Create second key.
+	kp2, err := s.CreateKeyPair("test-key-2", "eeff0011", "55667788eeff0011", "fp456")
+	if err != nil {
+		t.Fatalf("create key 2: %v", err)
+	}
+	if kp2.IsDefault {
+		t.Fatal("second key should not be default")
+	}
+
+	// List keys.
+	keys, err := s.ListKeyPairs()
+	if err != nil {
+		t.Fatalf("list keys: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(keys))
+	}
+
+	// Set default.
+	if err := s.SetDefaultKeyPair(kp2.ID); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	def2, _ := s.GetDefaultKeyPair()
+	if def2.ID != kp2.ID {
+		t.Fatal("kp2 should now be default")
+	}
+
+	// Delete key.
+	if err := s.DeleteKeyPair(kp.ID); err != nil {
+		t.Fatalf("delete key: %v", err)
+	}
+	keys2, _ := s.ListKeyPairs()
+	if len(keys2) != 1 {
+		t.Fatalf("expected 1 key, got %d", len(keys2))
+	}
+}
+
+func TestDuplicateKeyName(t *testing.T) {
+	s := testStore(t)
+	s.CreateKeyPair("dup-key", "aa", "bb", "fp")
+	_, err := s.CreateKeyPair("dup-key", "cc", "dd", "fp2")
+	if err == nil {
+		t.Fatal("expected error for duplicate key name")
+	}
+}
+
 func TestDisabledUserSession(t *testing.T) {
 	s := testStore(t)
 

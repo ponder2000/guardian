@@ -15,31 +15,52 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	// Handlers.
 	auth := handlers.NewAuth(app.store, tmpl, app.logger)
 	dashboard := handlers.NewDashboard(app.store, tmpl, app.logger)
+	users := handlers.NewUsers(app.store, tmpl, app.logger)
+	keys := handlers.NewKeys(app.store, tmpl, app.logger)
+	audit := handlers.NewAudit(app.store, tmpl, app.logger)
 
-	// Public routes.
+	// Route helper functions.
 	public := func(h http.HandlerFunc) http.Handler {
 		return Chain(h, mw.Recovery, mw.Logger, mw.SecureHeaders, mw.SessionLoader)
 	}
-
-	// Authenticated routes.
 	authed := func(h http.HandlerFunc) http.Handler {
 		return Chain(h, mw.Recovery, mw.Logger, mw.SecureHeaders, mw.SessionLoader, mw.RequireAuth)
 	}
-
-	// Admin-only routes.
-	_ = func(h http.HandlerFunc) http.Handler {
+	admin := func(h http.HandlerFunc) http.Handler {
 		return Chain(h, mw.Recovery, mw.Logger, mw.SecureHeaders, mw.SessionLoader, mw.RequireAuth, mw.RequireAdmin)
 	}
 
-	// Auth.
+	// --- Auth ---
 	mux.Handle("GET /login", public(auth.LoginPage))
 	mux.Handle("POST /login", public(auth.Login))
 	mux.Handle("POST /logout", authed(auth.Logout))
 
-	// Dashboard.
+	// --- Dashboard ---
 	mux.Handle("GET /{$}", authed(dashboard.Index))
 
-	// Placeholder routes — will be replaced in subsequent phases.
+	// --- Users (admin only) ---
+	mux.Handle("GET /users", admin(users.List))
+	mux.Handle("GET /users/new", admin(users.NewForm))
+	mux.Handle("POST /users", admin(users.Create))
+	mux.Handle("GET /users/{id}/edit", admin(users.EditForm))
+	mux.Handle("POST /users/{id}", admin(users.Update))
+	mux.Handle("POST /users/{id}/delete", admin(users.Delete))
+
+	// --- Keys (admin only) ---
+	mux.Handle("GET /keys", admin(keys.List))
+	mux.Handle("GET /keys/new", admin(keys.GenerateForm))
+	mux.Handle("POST /keys/generate", admin(keys.Generate))
+	mux.Handle("POST /keys/import", admin(keys.Import))
+	mux.Handle("GET /keys/{id}", admin(keys.Detail))
+	mux.Handle("POST /keys/{id}/default", admin(keys.SetDefault))
+	mux.Handle("POST /keys/{id}/delete", admin(keys.Delete))
+	mux.Handle("GET /keys/{id}/download/public", admin(keys.DownloadPublic))
+
+	// --- Audit (admin only) ---
+	mux.Handle("GET /audit", admin(audit.List))
+	mux.Handle("GET /audit/search", admin(audit.Search))
+
+	// --- Placeholder routes (to be implemented) ---
 	placeholder := func(title, active string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			user := UserFromContext(r.Context())
@@ -56,10 +77,7 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("GET /projects", authed(placeholder("Projects", "projects")))
 	mux.Handle("GET /hardware", authed(placeholder("Hardware", "hardware")))
 	mux.Handle("GET /licenses", authed(placeholder("Licenses", "licenses")))
-	mux.Handle("GET /users", authed(placeholder("Users", "users")))
-	mux.Handle("GET /keys", authed(placeholder("Keys", "keys")))
 	mux.Handle("GET /access", authed(placeholder("Access", "access")))
-	mux.Handle("GET /audit", authed(placeholder("Audit Log", "audit")))
 	mux.Handle("GET /repository", authed(placeholder("Repository", "repository")))
 	mux.Handle("GET /export-import", authed(placeholder("Export / Import", "export-import")))
 	mux.Handle("GET /docs", authed(placeholder("Documentation", "docs")))
