@@ -1,0 +1,110 @@
+{{define "content"}}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <p class="mt-1 text-sm text-gray-500">Overview of your Guardian license management system.</p>
+</div>
+
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow border border-gray-100">
+        <dt class="truncate text-sm font-medium text-gray-500">Projects</dt>
+        <dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{{.Stats.Projects}}</dd>
+    </div>
+    <div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow border border-gray-100">
+        <dt class="truncate text-sm font-medium text-gray-500">Hardware Configs</dt>
+        <dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{{.Stats.Hardware}}</dd>
+    </div>
+    <div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow border border-gray-100">
+        <dt class="truncate text-sm font-medium text-gray-500">Licenses</dt>
+        <dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{{.Stats.Licenses}}</dd>
+    </div>
+    <div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow border border-gray-100">
+        <dt class="truncate text-sm font-medium text-gray-500">Key Pairs</dt>
+        <dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{{.Stats.Keys}}</dd>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="mt-8">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {{if isAdmin .User.Role}}
+        <a href="/projects/new" class="relative flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
+                <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-gray-900">New Project</p>
+                <p class="text-xs text-gray-500">Create a new customer project</p>
+            </div>
+        </a>
+        <a href="/licenses/new" class="relative flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
+                <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-gray-900">Create License</p>
+                <p class="text-xs text-gray-500">Generate a new signed license</p>
+            </div>
+        </a>
+        <a href="/keys" class="relative flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
+                <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-gray-900">Manage Keys</p>
+                <p class="text-xs text-gray-500">Generate or import signing keys</p>
+            </div>
+        </a>
+        {{end}}
+        <a href="/repository" class="relative flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+                <svg class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-gray-900">Downloads</p>
+                <p class="text-xs text-gray-500">Download packages and keys</p>
+            </div>
+        </a>
+        <a href="/docs" class="relative flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all">
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
+                <svg class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold text-gray-900">Documentation</p>
+                <p class="text-xs text-gray-500">CLI reference and SDK guides</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Recent Audit Logs -->
+{{if and (isAdmin .User.Role) .RecentLogs}}
+<div class="mt-8">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">Recent Activity</h2>
+        <a href="/audit" class="text-sm text-indigo-600 hover:text-indigo-500">View all</a>
+    </div>
+    <div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {{range .RecentLogs}}
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900">{{.Username}}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{.Action}}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{formatDateTime .CreatedAt}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+{{end}}

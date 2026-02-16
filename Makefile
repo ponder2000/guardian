@@ -5,7 +5,7 @@ BUILD_TIME   := $(shell date '+%Y-%m-%d %H:%M:%S %Z')
 AUTHOR       := Jay Saha
 LDFLAGS      := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X 'main.buildTime=$(BUILD_TIME)' -X 'main.author=$(AUTHOR)'
 
-BINARIES     := guardiand guardian-cli license-gen
+BINARIES     := guardiand guardian-cli license-gen guardian-manager
 
 # Default to current OS/arch
 GOOS         ?= $(shell go env GOOS)
