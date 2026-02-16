@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -435,5 +436,164 @@ func TestDisabledUserSession(t *testing.T) {
 	_, _, err := s.GetSession(sess.ID)
 	if err == nil {
 		t.Fatal("expected error for disabled user session")
+	}
+}
+
+func TestLicenseCRUD(t *testing.T) {
+	s := testStore(t)
+
+	// Set up required foreign key records.
+	p, _ := s.CreateProject("License Proj", "", "", "")
+	hw, _ := s.CreateHardwareConfig(p.ID, "Server1", "machine1", "cpu1", "mb1", "disk1", "aa:bb:cc", "")
+	kp, _ := s.CreateKeyPair("lic-key", "aabb", "ccdd", "fp1")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	expires := now.Add(365 * 24 * time.Hour)
+
+	rec := &LicenseRecord{
+		LicenseID:        "LIC-TEST001",
+		ProjectID:        p.ID,
+		HardwareConfigID: hw.ID,
+		KeyPairID:        kp.ID,
+		IssuedTo:         "Test Customer",
+		IssuedAt:         now,
+		ExpiresAt:        expires,
+		MatchThreshold:   3,
+		ModulesJSON:      `{"analytics":{"enabled":true}}`,
+		GlobalLimitsJSON: `{}`,
+		LicenseFileData:  "GUARDIAN-LICENSE-V1\nPAYLOAD: test\nSIGNATURE: test\nSIGNER: test",
+		Salt:             "abc123",
+		Version:          1,
+		Notes:            "test license",
+	}
+
+	// Create.
+	created, err := s.CreateLicenseRecord(rec)
+	if err != nil {
+		t.Fatalf("create license: %v", err)
+	}
+	if created.LicenseID != "LIC-TEST001" || created.IssuedTo != "Test Customer" {
+		t.Fatalf("unexpected license: %+v", created)
+	}
+	if created.ProjectName != "License Proj" || created.HardwareLabel != "Server1" || created.KeyName != "lic-key" {
+		t.Fatalf("joined fields wrong: project=%q hw=%q key=%q", created.ProjectName, created.HardwareLabel, created.KeyName)
+	}
+
+	// Get by ID.
+	got, err := s.GetLicenseRecord(created.ID)
+	if err != nil {
+		t.Fatalf("get license: %v", err)
+	}
+	if got.LicenseID != "LIC-TEST001" || got.MatchThreshold != 3 {
+		t.Fatalf("get returned wrong data: %+v", got)
+	}
+
+	// Get by license ID.
+	got2, err := s.GetLicenseRecordByLicenseID("LIC-TEST001")
+	if err != nil {
+		t.Fatalf("get by license_id: %v", err)
+	}
+	if got2.ID != created.ID {
+		t.Fatal("get by license_id returned different record")
+	}
+
+	// List all.
+	all, err := s.ListLicenseRecords()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected 1 license, got %d", len(all))
+	}
+
+	// List for project.
+	projLics, err := s.ListLicensesForProject(p.ID)
+	if err != nil {
+		t.Fatalf("list for project: %v", err)
+	}
+	if len(projLics) != 1 {
+		t.Fatalf("expected 1 project license, got %d", len(projLics))
+	}
+
+	// Update license file data.
+	newExpires := expires.Add(30 * 24 * time.Hour)
+	err = s.UpdateLicenseFileData(created.ID, "new-file-data", `{"mod1":{}}`, `{"limit":1}`, newExpires, 4)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	updated, _ := s.GetLicenseRecord(created.ID)
+	if updated.LicenseFileData != "new-file-data" || updated.MatchThreshold != 4 {
+		t.Fatalf("update didn't apply: data=%q threshold=%d", updated.LicenseFileData, updated.MatchThreshold)
+	}
+	if updated.ModulesJSON != `{"mod1":{}}` {
+		t.Fatalf("modules not updated: %s", updated.ModulesJSON)
+	}
+
+	// Delete.
+	if err := s.DeleteLicenseRecord(created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	_, err = s.GetLicenseRecord(created.ID)
+	if err == nil {
+		t.Fatal("expected error for deleted license")
+	}
+}
+
+func TestLicenseNotFound(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.GetLicenseRecord(999)
+	if err == nil {
+		t.Fatal("expected error for nonexistent license")
+	}
+
+	_, err = s.GetLicenseRecordByLicenseID("NOPE")
+	if err == nil {
+		t.Fatal("expected error for nonexistent license_id")
+	}
+}
+
+func TestMultipleLicensesForProject(t *testing.T) {
+	s := testStore(t)
+
+	p, _ := s.CreateProject("Multi Lic", "", "", "")
+	hw1, _ := s.CreateHardwareConfig(p.ID, "HW-A", "", "", "", "", "", "")
+	hw2, _ := s.CreateHardwareConfig(p.ID, "HW-B", "", "", "", "", "", "")
+	kp, _ := s.CreateKeyPair("multi-key", "aa", "bb", "fp")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	expires := now.Add(365 * 24 * time.Hour)
+
+	for i, hw := range []int{hw1.ID, hw2.ID} {
+		rec := &LicenseRecord{
+			LicenseID:        fmt.Sprintf("LIC-MULTI%d", i),
+			ProjectID:        p.ID,
+			HardwareConfigID: hw,
+			KeyPairID:        kp.ID,
+			IssuedTo:         "Customer",
+			IssuedAt:         now,
+			ExpiresAt:        expires,
+			MatchThreshold:   3,
+			ModulesJSON:      "{}",
+			GlobalLimitsJSON: "{}",
+			LicenseFileData:  "test",
+			Salt:             "salt",
+			Version:          1,
+		}
+		if _, err := s.CreateLicenseRecord(rec); err != nil {
+			t.Fatalf("create license %d: %v", i, err)
+		}
+	}
+
+	lics, _ := s.ListLicensesForProject(p.ID)
+	if len(lics) != 2 {
+		t.Fatalf("expected 2, got %d", len(lics))
+	}
+
+	// Other project should have 0.
+	p2, _ := s.CreateProject("Empty Proj", "", "", "")
+	lics2, _ := s.ListLicensesForProject(p2.ID)
+	if len(lics2) != 0 {
+		t.Fatalf("expected 0, got %d", len(lics2))
 	}
 }

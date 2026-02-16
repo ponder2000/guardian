@@ -1,0 +1,72 @@
+{{define "content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Licenses</h1>
+        <p class="mt-1 text-sm text-gray-500">Manage software licenses for customer deployments.</p>
+    </div>
+    {{if isAdmin .User.Role}}
+    <div class="flex gap-2">
+        <a href="/licenses/upload" class="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50 transition-colors">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+            Upload &amp; Analyze
+        </a>
+        <a href="/licenses/new" class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+            New License
+        </a>
+    </div>
+    {{end}}
+</div>
+
+<div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">License ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hardware</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+            {{range .Licenses}}
+            <tr>
+                <td class="px-4 py-3 text-sm">
+                    <a href="/licenses/{{.ID}}" class="font-medium text-indigo-600 hover:text-indigo-500">{{.LicenseID}}</a>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900">{{.IssuedTo}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{.ProjectName}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{.HardwareLabel}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{formatDate .ExpiresAt}}</td>
+                <td class="px-4 py-3 text-sm">
+                    {{if isExpired .ExpiresAt}}
+                    <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/20">Expired</span>
+                    {{else}}
+                    <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-green-600/20">Active</span>
+                    {{end}}
+                </td>
+                <td class="px-4 py-3 text-sm text-right space-x-2">
+                    <a href="/licenses/{{.ID}}" class="text-indigo-600 hover:text-indigo-500">View</a>
+                    <a href="/licenses/{{.ID}}/download" class="text-gray-600 hover:text-gray-500">Download</a>
+                    {{if isAdmin $.User.Role}}
+                    <a href="/licenses/{{.ID}}/edit" class="text-gray-600 hover:text-gray-500">Edit</a>
+                    {{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">
+                    No licenses yet.
+                    {{if isAdmin .User.Role}}
+                    <a href="/licenses/new" class="ml-1 text-indigo-600 hover:text-indigo-500">Create your first license</a>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

@@ -21,6 +21,7 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	projects := handlers.NewProjects(app.store, tmpl, app.logger)
 	hardware := handlers.NewHardware(app.store, tmpl, app.logger)
 	access := handlers.NewAccess(app.store, tmpl, app.logger)
+	licenses := handlers.NewLicenses(app.store, tmpl, app.logger)
 
 	// Route helpers.
 	public := func(h http.HandlerFunc) http.Handler {
@@ -87,6 +88,19 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("POST /access/grant", admin(access.Grant))
 	mux.Handle("POST /access/revoke", admin(access.Revoke))
 
+	// --- Licenses ---
+	mux.Handle("GET /licenses", authed(licenses.List))
+	mux.Handle("GET /licenses/new", admin(licenses.NewForm))
+	mux.Handle("GET /licenses/upload", admin(licenses.UploadForm))
+	mux.Handle("POST /licenses/upload", admin(licenses.Upload))
+	mux.Handle("GET /licenses/hardware", admin(licenses.HardwareForProject))
+	mux.Handle("POST /licenses", admin(licenses.Create))
+	mux.Handle("GET /licenses/{id}", authed(licenses.Detail))
+	mux.Handle("GET /licenses/{id}/edit", admin(licenses.EditForm))
+	mux.Handle("POST /licenses/{id}", admin(licenses.Update))
+	mux.Handle("GET /licenses/{id}/download", authed(licenses.Download))
+	mux.Handle("POST /licenses/{id}/delete", admin(licenses.Delete))
+
 	// --- Placeholder routes ---
 	placeholder := func(title, active string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +113,6 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 		}
 	}
 
-	mux.Handle("GET /licenses", authed(placeholder("Licenses", "licenses")))
 	mux.Handle("GET /repository", authed(placeholder("Repository", "repository")))
 	mux.Handle("GET /export-import", authed(placeholder("Export / Import", "export-import")))
 	mux.Handle("GET /docs", authed(placeholder("Documentation", "docs")))

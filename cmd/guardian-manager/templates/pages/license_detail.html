@@ -1,0 +1,136 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/licenses" class="text-sm text-indigo-600 hover:text-indigo-500">&larr; Back to Licenses</a>
+    <div class="flex items-center justify-between mt-2">
+        <h1 class="text-2xl font-bold text-gray-900">{{.Record.LicenseID}}</h1>
+        {{if isAdmin .User.Role}}
+        <div class="flex gap-2">
+            <a href="/licenses/{{.Record.ID}}/download" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">Download</a>
+            <a href="/licenses/{{.Record.ID}}/edit" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">Edit</a>
+            <form method="POST" action="/licenses/{{.Record.ID}}/delete" class="inline" onsubmit="return confirm('Delete this license?')">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <button type="submit" class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Delete</button>
+            </form>
+        </div>
+        {{else}}
+        <a href="/licenses/{{.Record.ID}}/download" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Download</a>
+        {{end}}
+    </div>
+</div>
+
+<!-- License Info -->
+<div class="bg-white shadow rounded-lg border border-gray-100 p-6 mb-6">
+    <h2 class="text-sm font-semibold text-gray-900 mb-4">License Information</h2>
+    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+            <dt class="text-sm font-medium text-gray-500">License ID</dt>
+            <dd class="mt-1 text-sm text-gray-900 font-mono">{{.Record.LicenseID}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Customer</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{.Record.IssuedTo}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Status</dt>
+            <dd class="mt-1">
+                {{if isExpired .Record.ExpiresAt}}
+                <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-red-600/20">Expired</span>
+                {{else}}
+                <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-600/20">Active</span>
+                {{end}}
+            </dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Project</dt>
+            <dd class="mt-1 text-sm text-gray-900"><a href="/projects/{{.Record.ProjectID}}" class="text-indigo-600 hover:text-indigo-500">{{.Record.ProjectName}}</a></dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Hardware</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{.Record.HardwareLabel}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Signing Key</dt>
+            <dd class="mt-1 text-sm text-gray-900"><a href="/keys/{{.Record.KeyPairID}}" class="text-indigo-600 hover:text-indigo-500">{{.Record.KeyName}}</a></dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Issued At</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{formatDateTime .Record.IssuedAt}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Expires At</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{formatDateTime .Record.ExpiresAt}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Match Threshold</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{.Record.MatchThreshold}} of 5</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Version</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{.Record.Version}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Created</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{formatDateTime .Record.CreatedAt}}</dd>
+        </div>
+        <div>
+            <dt class="text-sm font-medium text-gray-500">Updated</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{formatDateTime .Record.UpdatedAt}}</dd>
+        </div>
+        {{if .Record.Notes}}
+        <div class="sm:col-span-2 lg:col-span-3">
+            <dt class="text-sm font-medium text-gray-500">Notes</dt>
+            <dd class="mt-1 text-sm text-gray-900">{{.Record.Notes}}</dd>
+        </div>
+        {{end}}
+    </dl>
+</div>
+
+{{if .Decoded}}
+<!-- Decoded Modules -->
+<div class="bg-white shadow rounded-lg border border-gray-100 p-6 mb-6">
+    <h2 class="text-sm font-semibold text-gray-900 mb-4">Modules</h2>
+    {{if .Decoded.Modules}}
+    <div class="space-y-3">
+        {{range $name, $mod := .Decoded.Modules}}
+        <div class="rounded-md border border-gray-200 p-3">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-medium text-gray-900">{{$name}}</span>
+                {{if $mod.Enabled}}
+                <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Enabled</span>
+                {{else}}
+                <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Disabled</span>
+                {{end}}
+            </div>
+            {{if $mod.Metadata}}
+            <div class="mt-1">
+                {{range $k, $v := $mod.Metadata}}
+                <span class="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 mr-1 mb-1">{{$k}}: {{$v}}</span>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <p class="text-sm text-gray-500">No modules defined.</p>
+    {{end}}
+</div>
+
+<!-- Hardware Fingerprints -->
+<div class="bg-white shadow rounded-lg border border-gray-100 p-6 mb-6">
+    <h2 class="text-sm font-semibold text-gray-900 mb-4">Hardware Fingerprints</h2>
+    <dl class="space-y-2">
+        <div>
+            <dt class="text-xs font-medium text-gray-500">Salt</dt>
+            <dd class="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded break-all">{{.Decoded.Hardware.Salt}}</dd>
+        </div>
+        {{range $comp, $fp := .Decoded.Hardware.Fingerprints}}
+        <div>
+            <dt class="text-xs font-medium text-gray-500">{{$comp}}</dt>
+            <dd class="mt-0.5 text-xs text-gray-900 font-mono bg-gray-50 p-1.5 rounded break-all">{{$fp}}</dd>
+        </div>
+        {{end}}
+    </dl>
+</div>
+{{end}}
+{{end}}

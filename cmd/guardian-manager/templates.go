@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -61,6 +62,19 @@ var funcMap = template.FuncMap{
 	},
 	"add": func(a, b int) int { return a + b },
 	"sub": func(a, b int) int { return a - b },
+	"isExpired": func(t time.Time) bool {
+		return !t.IsZero() && time.Now().After(t)
+	},
+	"formatDateInput": func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.Format("2006-01-02")
+	},
+	"json": func(v interface{}) string {
+		b, _ := json.Marshal(v)
+		return string(b)
+	},
 }
 
 // Templates manages page templates with layout composition.
