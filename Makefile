@@ -18,7 +18,7 @@ OUTDIR       := bin/$(GOOS)
 DEB_ROOT     := bin/deb-staging
 DEB_PKG      := bin/guardian_$(VERSION)_amd64.deb
 
-.PHONY: all build build-linux build-macos test clean package-deb
+.PHONY: all build build-linux build-macos test clean package-deb run-manager
 
 all: build
 
@@ -91,6 +91,13 @@ Description: Guardian License Enforcement Daemon\n\
 	dpkg-deb --build --root-owner-group $(DEB_ROOT) $(DEB_PKG)
 	@echo ""
 	@echo "Package created: $(DEB_PKG)"
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
+
+run-manager:
+	go run -ldflags "$(LDFLAGS)" ./cmd/guardian-manager/
 
 # ---------------------------------------------------------------------------
 # Clean
