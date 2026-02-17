@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -133,38 +134,50 @@ func (k *Keys) Generate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/keys?flash=Key+pair+generated+successfully", http.StatusSeeOther)
 }
 
-// Import handles importing existing key files.
+// Import handles importing existing key files (via file upload or hex text input).
 func (k *Keys) Import(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)
+	r.ParseMultipartForm(2 << 20) // 2 MB max
 	name := strings.TrimSpace(r.FormValue("name"))
-	pubHex := strings.TrimSpace(r.FormValue("public_key"))
-	privHex := strings.TrimSpace(r.FormValue("private_key"))
 
-	if name == "" || pubHex == "" || privHex == "" {
+	renderErr := func(msg string) {
 		data := KeyFormData{
 			PageData: PageData{
-				Title:     "Generate Key Pair",
+				Title:     "New Key Pair",
 				Active:    "keys",
 				User:      user,
 				CSRFToken: GetCSRFToken(r),
-				Error:     "All fields are required",
+				Error:     msg,
 			},
 		}
 		w.WriteHeader(http.StatusBadRequest)
 		k.templates.RenderPage(w, "key_form", "base", data)
+	}
+
+	if name == "" {
+		renderErr("Key name is required")
+		return
+	}
+
+	// Try reading from file uploads first, fall back to hex text fields.
+	pubHex := readKeyInput(r, "public_key_file", "public_key")
+	privHex := readKeyInput(r, "private_key_file", "private_key")
+
+	if pubHex == "" || privHex == "" {
+		renderErr("Both public and private keys are required (upload files or enter hex)")
 		return
 	}
 
 	// Validate hex encoding.
 	pubBytes, err := hex.DecodeString(pubHex)
 	if err != nil || len(pubBytes) != 32 {
-		http.Error(w, "Invalid public key (expected 32-byte hex-encoded Ed25519 key)", http.StatusBadRequest)
+		renderErr("Invalid public key (expected 32-byte hex-encoded Ed25519 key)")
 		return
 	}
 
 	privBytes, err := hex.DecodeString(privHex)
 	if err != nil || len(privBytes) != 64 {
-		http.Error(w, "Invalid private key (expected 64-byte hex-encoded Ed25519 key)", http.StatusBadRequest)
+		renderErr("Invalid private key (expected 64-byte hex-encoded Ed25519 key)")
 		return
 	}
 
@@ -173,7 +186,7 @@ func (k *Keys) Import(w http.ResponseWriter, r *http.Request) {
 
 	stored, err := k.store.CreateKeyPair(name, pubHex, privHex, fingerprint)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to store key pair: %v", err), http.StatusBadRequest)
+		renderErr(fmt.Sprintf("Failed to store key pair: %v", err))
 		return
 	}
 
@@ -181,6 +194,22 @@ func (k *Keys) Import(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf(`{"name":%q,"fingerprint":%q}`, name, fingerprint), ClientIP(r))
 
 	http.Redirect(w, r, "/keys?flash=Key+pair+imported+successfully", http.StatusSeeOther)
+}
+
+// readKeyInput reads a key from a file upload field first; if empty, falls back to the text field.
+func readKeyInput(r *http.Request, fileField, textField string) string {
+	file, _, err := r.FormFile(fileField)
+	if err == nil {
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, 256))
+		if err == nil {
+			val := strings.TrimSpace(string(data))
+			if val != "" {
+				return val
+			}
+		}
+	}
+	return strings.TrimSpace(r.FormValue(textField))
 }
 
 // Detail shows key pair details.
@@ -246,4 +275,18 @@ func (k *Keys) DownloadPublic(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.pub", key.Name))
 	w.Write([]byte(key.PublicKeyHex))
+}
+
+// DownloadPrivate serves the private key as a downloadable file.
+func (k *Keys) DownloadPrivate(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	key, err := k.store.GetKeyPair(id)
+	if err != nil {
+		http.Error(w, "Key pair not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.priv", key.Name))
+	w.Write([]byte(key.PrivateKeyHex))
 }

@@ -40,7 +40,8 @@
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500">{{formatDate .CreatedAt}}</td>
                 <td class="px-4 py-3 text-sm text-right space-x-2">
-                    <a href="/keys/{{.ID}}/download/public" hx-boost="false" class="text-indigo-600 hover:text-indigo-500">Download Pub</a>
+                    <a href="/keys/{{.ID}}/download/public" hx-boost="false" class="text-indigo-600 hover:text-indigo-500">Pub</a>
+                    <a href="/keys/{{.ID}}/download/private" hx-boost="false" class="text-indigo-600 hover:text-indigo-500">Priv</a>
                     <form method="POST" action="/keys/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this key pair? This cannot be undone.')">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                         <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>

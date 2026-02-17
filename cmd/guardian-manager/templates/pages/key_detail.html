@@ -35,6 +35,10 @@
            class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
             Download Public Key
         </a>
+        <a href="/keys/{{.Key.ID}}/download/private" hx-boost="false"
+           class="rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 transition-colors">
+            Download Private Key
+        </a>
         {{if not .Key.IsDefault}}
         <form method="POST" action="/keys/{{.Key.ID}}/default" class="inline">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

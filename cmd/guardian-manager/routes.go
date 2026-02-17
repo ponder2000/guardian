@@ -61,6 +61,7 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("POST /keys/{id}/default", admin(keys.SetDefault))
 	mux.Handle("POST /keys/{id}/delete", admin(keys.Delete))
 	mux.Handle("GET /keys/{id}/download/public", admin(keys.DownloadPublic))
+	mux.Handle("GET /keys/{id}/download/private", admin(keys.DownloadPrivate))
 
 	// --- Audit (admin) ---
 	mux.Handle("GET /audit", admin(audit.List))
