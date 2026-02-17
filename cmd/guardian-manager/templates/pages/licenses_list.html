@@ -50,7 +50,7 @@
                 </td>
                 <td class="px-4 py-3 text-sm text-right space-x-2">
                     <a href="/licenses/{{.ID}}" class="text-indigo-600 hover:text-indigo-500">View</a>
-                    <a href="/licenses/{{.ID}}/download" class="text-gray-600 hover:text-gray-500">Download</a>
+                    <a href="/licenses/{{.ID}}/download" hx-boost="false" class="text-gray-600 hover:text-gray-500">Download</a>
                     {{if isAdmin $.User.Role}}
                     <a href="/licenses/{{.ID}}/edit" class="text-gray-600 hover:text-gray-500">Edit</a>
                     {{end}}

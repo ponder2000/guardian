@@ -8,15 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ponder2000/guardian/cmd/guardian-manager/handlers"
 	"github.com/ponder2000/guardian/internal/store"
-)
-
-type contextKey string
-
-const (
-	ctxUser      contextKey = "user"
-	ctxSession   contextKey = "session"
-	ctxCSRFToken contextKey = "csrf_token"
 )
 
 // Middleware holds dependencies for HTTP middleware.
@@ -70,8 +63,8 @@ func (m *Middleware) SessionLoader(next http.Handler) http.Handler {
 		if err == nil && cookie.Value != "" {
 			sess, user, err := m.store.GetSession(cookie.Value)
 			if err == nil {
-				ctx := context.WithValue(r.Context(), ctxUser, user)
-				ctx = context.WithValue(ctx, ctxSession, sess)
+				ctx := context.WithValue(r.Context(), handlers.CtxUser, user)
+				_ = sess
 				r = r.WithContext(ctx)
 			}
 		}
@@ -80,7 +73,7 @@ func (m *Middleware) SessionLoader(next http.Handler) http.Handler {
 		csrfBytes := make([]byte, 16)
 		rand.Read(csrfBytes)
 		csrfToken := hex.EncodeToString(csrfBytes)
-		ctx := context.WithValue(r.Context(), ctxCSRFToken, csrfToken)
+		ctx := context.WithValue(r.Context(), handlers.CtxCSRFToken, csrfToken)
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
@@ -124,13 +117,13 @@ func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.
 
 // UserFromContext returns the authenticated user from context, or nil.
 func UserFromContext(ctx context.Context) *store.User {
-	u, _ := ctx.Value(ctxUser).(*store.User)
+	u, _ := ctx.Value(handlers.CtxUser).(*store.User)
 	return u
 }
 
 // CSRFTokenFromContext returns the CSRF token from context.
 func CSRFTokenFromContext(ctx context.Context) string {
-	t, _ := ctx.Value(ctxCSRFToken).(string)
+	t, _ := ctx.Value(handlers.CtxCSRFToken).(string)
 	return t
 }
 

@@ -24,17 +24,25 @@ type PageData struct {
 	Username  string // for login form repopulation
 }
 
-type contextKey string
+// ContextKey is the type used for context keys shared between middleware and handlers.
+type ContextKey string
+
+const (
+	// CtxUser is the context key for the authenticated user.
+	CtxUser ContextKey = "user"
+	// CtxCSRFToken is the context key for the CSRF token.
+	CtxCSRFToken ContextKey = "csrf_token"
+)
 
 // GetUser returns the authenticated user from the request context.
 func GetUser(r *http.Request) *store.User {
-	u, _ := r.Context().Value(contextKey("user")).(*store.User)
+	u, _ := r.Context().Value(CtxUser).(*store.User)
 	return u
 }
 
 // GetCSRFToken returns the CSRF token from the request context.
 func GetCSRFToken(r *http.Request) string {
-	t, _ := r.Context().Value(contextKey("csrf_token")).(string)
+	t, _ := r.Context().Value(CtxCSRFToken).(string)
 	return t
 }
 

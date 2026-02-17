@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-900">{{.Record.LicenseID}}</h1>
         {{if isAdmin .User.Role}}
         <div class="flex gap-2">
-            <a href="/licenses/{{.Record.ID}}/download" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">Download</a>
+            <a href="/licenses/{{.Record.ID}}/download" hx-boost="false" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">Download</a>
             <a href="/licenses/{{.Record.ID}}/edit" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">Edit</a>
             <form method="POST" action="/licenses/{{.Record.ID}}/delete" class="inline" onsubmit="return confirm('Delete this license?')">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -13,7 +13,7 @@
             </form>
         </div>
         {{else}}
-        <a href="/licenses/{{.Record.ID}}/download" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Download</a>
+        <a href="/licenses/{{.Record.ID}}/download" hx-boost="false" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Download</a>
         {{end}}
     </div>
 </div>
