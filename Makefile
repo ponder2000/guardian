@@ -18,7 +18,7 @@ OUTDIR       := bin/$(GOOS)
 DEB_ROOT     := bin/deb-staging
 DEB_PKG      := bin/guardian_$(VERSION)_amd64.deb
 
-.PHONY: all build build-linux build-macos test clean package-deb run-manager
+.PHONY: all build build-linux build-macos test clean package-deb run-manager docker-build docker-push
 
 all: build
 
@@ -97,7 +97,22 @@ Description: Guardian License Enforcement Daemon\n\
 # ---------------------------------------------------------------------------
 
 run-manager:
+	@mkdir -p data
 	go run -ldflags "$(LDFLAGS)" ./cmd/guardian-manager/
+
+# ---------------------------------------------------------------------------
+# Docker
+# ---------------------------------------------------------------------------
+
+DOCKER_IMAGE := jaysaha/guardian-manager
+DOCKER_TAG   ?= $(VERSION)
+
+docker-build:
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+
+docker-push: docker-build
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_IMAGE):latest
 
 # ---------------------------------------------------------------------------
 # Clean

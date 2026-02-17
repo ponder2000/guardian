@@ -28,7 +28,7 @@ type App struct {
 }
 
 func main() {
-	dbPath := flag.String("db", "guardian-manager.db", "Path to SQLite database file")
+	dbPath := flag.String("db", "data/guardian-manager.db", "Path to SQLite database file")
 	listen := flag.String("listen", ":8080", "HTTP listen address")
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()

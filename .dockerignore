@@ -1,0 +1,15 @@
+.git
+.gitignore
+.claude
+bin
+dist
+data
+secret
+*.md
+*.license
+*.priv
+*.key
+*.token
+.DS_Store
+.idea
+.vscode

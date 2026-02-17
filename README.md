@@ -712,6 +712,48 @@ sudo systemctl start guardian
 sudo dpkg -r guardian
 ```
 
+## Guardian Manager (Web Admin)
+
+Guardian Manager is a self-contained web admin panel for managing keys, projects, hardware configs, licenses, users, and audit logs — replacing the need for CLI tools in day-to-day operations.
+
+### Run with Docker Compose
+
+```yaml
+# docker-compose.yml
+services:
+  guardian-manager:
+    image: jaysaha/guardian-manager:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+# Open http://localhost:8080
+# Default credentials: admin / changeme
+```
+
+The SQLite database is persisted in the `./data` directory on the host.
+
+### Run from source
+
+```bash
+make run-manager
+# Open http://localhost:8080
+```
+
+### Build and push Docker image
+
+```bash
+make docker-build          # build image
+make docker-push           # build + push to Docker Hub
+```
+
+---
+
 ## Testing
 
 ```bash

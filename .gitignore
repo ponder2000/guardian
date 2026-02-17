@@ -37,5 +37,11 @@ master.priv
 tokens.db
 *.token
 
-# Build
+# SQLite data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Build artifacts
 dist/
+/guardian-manager
