@@ -1,0 +1,61 @@
+{{define "content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Key Pairs</h1>
+        <p class="mt-1 text-sm text-gray-500">Ed25519 signing keys for license generation.</p>
+    </div>
+    <a href="/keys/new" class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        New Key Pair
+    </a>
+</div>
+
+<div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fingerprint</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Default</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+            {{range .Keys}}
+            <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                    <a href="/keys/{{.ID}}" class="text-indigo-600 hover:text-indigo-500">{{.Name}}</a>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{printf "%.16s" .Fingerprint}}...</td>
+                <td class="px-4 py-3 text-sm">
+                    {{if .IsDefault}}
+                    <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-600/20">Default</span>
+                    {{else}}
+                    <form method="POST" action="/keys/{{.ID}}/default" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="text-xs text-gray-500 hover:text-indigo-600">Set default</button>
+                    </form>
+                    {{end}}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{formatDate .CreatedAt}}</td>
+                <td class="px-4 py-3 text-sm text-right space-x-2">
+                    <a href="/keys/{{.ID}}/download/public" hx-boost="false" class="text-indigo-600 hover:text-indigo-500">Pub</a>
+                    <a href="/keys/{{.ID}}/download/private" hx-boost="false" class="text-indigo-600 hover:text-indigo-500">Priv</a>
+                    <form method="POST" action="/keys/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this key pair? This cannot be undone.')">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">
+                    No key pairs yet. Generate one to start creating licenses.
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

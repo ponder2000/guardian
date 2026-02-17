@@ -1,0 +1,180 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/docs" class="text-sm text-indigo-600 hover:text-indigo-500">&larr; Back to Docs</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">Client SDKs</h1>
+    <p class="mt-1 text-sm text-gray-500">Integration guides for Go, Python, and Java client libraries.</p>
+</div>
+
+<div class="max-w-3xl space-y-8">
+
+    <!-- Overview -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Overview</h2>
+        <p class="text-sm text-gray-600 mb-3">
+            Guardian provides client SDKs for Go, Python, and Java. Each SDK connects to the Guardian daemon over a Unix domain socket,
+            authenticates using a service token, and performs periodic license validation checks.
+        </p>
+        <div class="bg-gray-50 rounded-md p-4 text-sm text-gray-700">
+            <p class="font-medium mb-2">Common workflow:</p>
+            <ol class="list-decimal list-inside space-y-1 text-sm">
+                <li>Register a service token: <code class="bg-gray-200 px-1 rounded">guardian-cli register --service=myapp</code></li>
+                <li>Initialize the SDK client with the socket path and token file</li>
+                <li>Start the client &mdash; it authenticates and begins periodic checks</li>
+                <li>Handle valid/invalid callbacks in your application</li>
+                <li>Optionally force a check or query module metadata</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Go SDK -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">Go</span>
+            <h2 class="text-lg font-semibold text-gray-900">Go Client SDK</h2>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">Package: <code class="bg-gray-100 px-1 rounded">client/go</code></p>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Installation</h3>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">go get github.com/ponder2000/guardian/client/go</pre>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">package main
+
+import (
+    "log"
+    "time"
+    guardian "github.com/ponder2000/guardian/client/go"
+)
+
+func main() {
+    client := guardian.NewClient(
+        guardian.WithSocket("/var/run/guardian.sock"),
+        guardian.WithTokenFile("/etc/guardian/tokens/myapp.token"),
+        guardian.WithModule("analytics"),
+        guardian.WithCheckInterval(30 * time.Second),
+        guardian.WithStartupTimeout(10 * time.Second),
+        guardian.WithValidHandler(func() {
+            log.Println("License valid")
+        }),
+        guardian.WithInvalidHandler(func(reason string) {
+            log.Printf("License invalid: %s", reason)
+        }),
+    )
+
+    if err := client.Start(); err != nil {
+        log.Fatalf("Failed to start guardian client: %v", err)
+    }
+    defer client.Stop()
+
+    // Application code here...
+}</pre>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Configuration Options</h3>
+        <div class="overflow-hidden rounded-md border border-gray-200">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Option</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-200">
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithSocket(path)</td><td class="px-3 py-2 text-gray-600">Unix socket path (default: /var/run/guardian.sock)</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithTokenFile(path)</td><td class="px-3 py-2 text-gray-600">Service token file path</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithModule(name)</td><td class="px-3 py-2 text-gray-600">Module to validate (repeatable)</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithCheckInterval(d)</td><td class="px-3 py-2 text-gray-600">Check interval (default: 60s)</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithStartupTimeout(d)</td><td class="px-3 py-2 text-gray-600">Timeout for initial connection</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithValidHandler(fn)</td><td class="px-3 py-2 text-gray-600">Callback on successful validation</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithInvalidHandler(fn)</td><td class="px-3 py-2 text-gray-600">Callback on validation failure</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Python SDK -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="inline-flex items-center rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">Python</span>
+            <h2 class="text-lg font-semibold text-gray-900">Python Client SDK</h2>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">File: <code class="bg-gray-100 px-1 rounded">client/python/guardian_client.py</code></p>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">from guardian_client import GuardianClient
+
+def on_valid():
+    print("License valid")
+
+def on_invalid(reason):
+    print(f"License invalid: {reason}")
+
+client = GuardianClient(
+    socket_path="/var/run/guardian.sock",
+    token_path="/etc/guardian/tokens/myapp.token",
+    modules=["analytics"],
+    check_interval=30,
+    on_valid=on_valid,
+    on_invalid=on_invalid,
+)
+
+client.start()
+# Application code...
+client.stop()</pre>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Environment Variables</h3>
+        <div class="overflow-hidden rounded-md border border-gray-200">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Variable</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-200">
+                    <tr><td class="px-3 py-2 font-mono text-xs">GUARDIAN_SOCKET</td><td class="px-3 py-2 text-gray-600">Override socket path</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">GUARDIAN_TOKEN_PATH</td><td class="px-3 py-2 text-gray-600">Override token file path</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Java SDK -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">Java</span>
+            <h2 class="text-lg font-semibold text-gray-900">Java Client SDK</h2>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">Requires Java 16+ for <code class="bg-gray-100 px-1 rounded">UnixDomainSocketAddress</code>.</p>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">import com.guardian.GuardianClient;
+
+GuardianClient client = GuardianClient.builder()
+    .socketPath("/var/run/guardian.sock")
+    .tokenFile("/etc/guardian/tokens/myapp.token")
+    .module("analytics")
+    .checkIntervalSeconds(30)
+    .startupTimeoutSeconds(10)
+    .onValid(() -&gt; System.out.println("License valid"))
+    .onInvalid(reason -&gt; System.out.println("Invalid: " + reason))
+    .build();
+
+client.start();
+// Application code...
+client.stop();</pre>
+    </div>
+
+    <!-- Status Check -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Anonymous Status Check</h2>
+        <p class="text-sm text-gray-600 mb-3">
+            All SDKs support an anonymous status check that doesn&rsquo;t require a service token.
+            It returns minimal information: whether the daemon is running and the license is valid.
+        </p>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">// Go
+status, err := guardian.StatusCheck("/var/run/guardian.sock")
+
+# Python
+status = GuardianClient.status_check("/var/run/guardian.sock")
+
+// Java
+GuardianClient.StatusResult status = GuardianClient.statusCheck("/var/run/guardian.sock");</pre>
+    </div>
+</div>
+{{end}}

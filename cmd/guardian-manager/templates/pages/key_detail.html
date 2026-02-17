@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/keys" class="text-sm text-indigo-600 hover:text-indigo-500">&larr; Back to Keys</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">{{.Key.Name}}</h1>
+</div>
+
+<div class="max-w-2xl space-y-6">
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Name</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{.Key.Name}}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Default</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{if .Key.IsDefault}}Yes{{else}}No{{end}}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Created</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{formatDateTime .Key.CreatedAt}}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-sm font-medium text-gray-500">Fingerprint (SHA-256 of public key)</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-mono text-xs break-all bg-gray-50 p-2 rounded">{{.Key.Fingerprint}}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-sm font-medium text-gray-500">Public Key (hex)</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-mono text-xs break-all bg-gray-50 p-2 rounded">{{.Key.PublicKeyHex}}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <a href="/keys/{{.Key.ID}}/download/public" hx-boost="false"
+           class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+            Download Public Key
+        </a>
+        <a href="/keys/{{.Key.ID}}/download/private" hx-boost="false"
+           class="rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 transition-colors">
+            Download Private Key
+        </a>
+        {{if not .Key.IsDefault}}
+        <form method="POST" action="/keys/{{.Key.ID}}/default" class="inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 transition-colors">
+                Set as Default
+            </button>
+        </form>
+        {{end}}
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,209 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/docs" class="text-sm text-indigo-600 hover:text-indigo-500">&larr; Back to Docs</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">Architecture</h1>
+    <p class="mt-1 text-sm text-gray-500">System design, security model, and technical specifications.</p>
+</div>
+
+<div class="max-w-3xl space-y-8">
+
+    <!-- Overview -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">System Overview</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            Guardian is a native Linux daemon that acts as the root of trust for license enforcement.
+            It hardware-binds a cryptographically signed license and provides license validation services
+            via a Unix domain socket.
+        </p>
+        <div class="bg-gray-50 rounded-md p-4 text-xs font-mono text-gray-700 leading-relaxed">
+            <pre>
+ Issuer's Office                    Customer's Server
++------------------+              +---------------------------+
+| license-gen      |              | guardiand (daemon)        |
+|   init           |  .license   |   License verification    |
+|   create   ------+------------>|   Hardware fingerprint    |
+|   update         |  master.pub |   Token management        |
+|   verify         |------------>|   Session encryption      |
++------------------+              +--+--------+--------+-----+
+                                     |        |        |
+ Web Admin                           | UDS    | UDS    | UDS
++------------------+              +--+--+  +--+--+  +--+--+
+| guardian-manager |              | App1 |  | App2 |  | CLI |
+|   Keys           |              | (SDK)|  | (SDK)|  |     |
+|   Projects       |              +------+  +------+  +-----+
+|   Licenses       |
+|   Hardware       |
++------------------+</pre>
+        </div>
+    </div>
+
+    <!-- Key Hierarchy -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Key Hierarchy</h2>
+        <div class="space-y-3 text-sm text-gray-600">
+            <div class="flex gap-3 items-start">
+                <span class="flex-shrink-0 inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800">1</span>
+                <div>
+                    <span class="font-medium text-gray-900">Master Key Pair (Ed25519)</span>
+                    <p class="mt-0.5">Created by the issuer. Private key signs licenses, public key verifies them on the daemon.</p>
+                </div>
+            </div>
+            <div class="flex gap-3 items-start">
+                <span class="flex-shrink-0 inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800">2</span>
+                <div>
+                    <span class="font-medium text-gray-900">Daemon Key</span>
+                    <p class="mt-0.5">Derived from the license content. Used in the HMAC-SHA256 handshake with clients.</p>
+                </div>
+            </div>
+            <div class="flex gap-3 items-start">
+                <span class="flex-shrink-0 inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800">3</span>
+                <div>
+                    <span class="font-medium text-gray-900">Service Tokens</span>
+                    <p class="mt-0.5">Per-application tokens registered via <code class="bg-gray-100 px-1 rounded">guardian-cli register</code>. Used for client authentication.</p>
+                </div>
+            </div>
+            <div class="flex gap-3 items-start">
+                <span class="flex-shrink-0 inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800">4</span>
+                <div>
+                    <span class="font-medium text-gray-900">Session Keys (AES-256-GCM)</span>
+                    <p class="mt-0.5">Derived independently by both sides during handshake. All post-auth communication is encrypted.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hardware Fingerprinting -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Hardware Fingerprinting</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            Licenses are bound to hardware using 5 components. Each component is hashed with HMAC-SHA256
+            using a random salt embedded in the license. A configurable threshold (default 3-of-5) allows
+            tolerance for hardware changes.
+        </p>
+        <div class="overflow-hidden rounded-md border border-gray-200">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Component</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Source</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-200">
+                    <tr><td class="px-3 py-2 font-mono text-xs">machine_id</td><td class="px-3 py-2 text-gray-600">/etc/machine-id</td><td class="px-3 py-2 text-gray-600">Unique per-install identifier</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">cpu</td><td class="px-3 py-2 text-gray-600">/proc/cpuinfo</td><td class="px-3 py-2 text-gray-600">CPU model name string</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">motherboard</td><td class="px-3 py-2 text-gray-600">DMI baseboard</td><td class="px-3 py-2 text-gray-600">Baseboard serial number</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">disk_serial</td><td class="px-3 py-2 text-gray-600">Disk device</td><td class="px-3 py-2 text-gray-600">Primary disk serial number</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">nic_mac</td><td class="px-3 py-2 text-gray-600">Network interface</td><td class="px-3 py-2 text-gray-600">Primary NIC MAC address</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-3 text-xs text-gray-500">
+            Fingerprint formula: <code class="bg-gray-100 px-1 rounded">HMAC-SHA256(key=salt, message=component_value)</code>
+        </p>
+    </div>
+
+    <!-- License File Format -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">License File Format</h2>
+        <p class="text-sm text-gray-600 mb-3">License files use a simple text format with base64-encoded content.</p>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-3">GUARDIAN-LICENSE-V1
+PAYLOAD: &lt;base64-encoded JSON payload&gt;
+SIGNATURE: &lt;base64-encoded Ed25519 signature&gt;
+SIGNER: &lt;SHA-256 fingerprint of signing public key&gt;</pre>
+        <p class="text-sm text-gray-600 mb-2">The JSON payload contains:</p>
+        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">{
+  "license_id": "LIC-XXXXXXXX",
+  "version": 1,
+  "issued_to": "Customer Name",
+  "issued_at": "2024-01-01T00:00:00Z",
+  "expires_at": "2025-01-01T23:59:59Z",
+  "hardware": {
+    "salt": "random-hex-salt",
+    "fingerprints": {
+      "machine_id": "hmac-hash...",
+      "cpu": "hmac-hash...",
+      "motherboard": "hmac-hash...",
+      "disk_serial": "hmac-hash...",
+      "nic_mac": "hmac-hash..."
+    },
+    "match_threshold": 3
+  },
+  "modules": {
+    "analytics": {
+      "enabled": true,
+      "features": [],
+      "metadata": {"max_users": 100}
+    }
+  },
+  "global_limits": {}
+}</pre>
+    </div>
+
+    <!-- Wire Protocol -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Wire Protocol</h2>
+        <p class="text-sm text-gray-600 mb-3">
+            Communication uses length-prefixed messages over Unix domain sockets with msgpack serialization.
+        </p>
+        <div class="bg-gray-50 rounded-md p-3 text-xs font-mono mb-3">
+            [4 bytes: BE length] [1 byte: type] [N bytes: msgpack payload]
+        </div>
+        <div class="overflow-hidden rounded-md border border-gray-200">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Phase</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-200">
+                    <tr><td class="px-3 py-2 font-medium">Handshake</td><td class="px-3 py-2 text-gray-600">HMAC-SHA256 mutual authentication. Both sides derive session keys independently.</td></tr>
+                    <tr><td class="px-3 py-2 font-medium">Encrypted Session</td><td class="px-3 py-2 text-gray-600">All post-handshake messages are AES-256-GCM encrypted with the session key.</td></tr>
+                    <tr><td class="px-3 py-2 font-medium">Heartbeat</td><td class="px-3 py-2 text-gray-600">Periodic license validation checks from the client SDK.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Security Properties -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Security Properties</h2>
+        <div class="overflow-hidden rounded-md border border-gray-200">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50"><tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Property</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Mechanism</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-200">
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">License Authenticity</td><td class="px-3 py-2 text-gray-600">Ed25519 signature verification</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">Hardware Binding</td><td class="px-3 py-2 text-gray-600">HMAC-SHA256 fingerprints with 3-of-5 threshold</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">Mutual Authentication</td><td class="px-3 py-2 text-gray-600">HMAC-SHA256 challenge-response handshake</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">Channel Encryption</td><td class="px-3 py-2 text-gray-600">AES-256-GCM with unique session keys</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">Tamper Detection</td><td class="px-3 py-2 text-gray-600">Periodic watchdog re-verification</td></tr>
+                    <tr><td class="px-3 py-2 font-medium text-gray-900">Token Isolation</td><td class="px-3 py-2 text-gray-600">Per-service tokens with module scoping</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Deployment -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Deployment</h2>
+        <div class="space-y-4 text-sm text-gray-600">
+            <div>
+                <h3 class="font-medium text-gray-900 mb-1">Required Files on Target Machine</h3>
+                <ul class="list-disc list-inside space-y-0.5">
+                    <li><code class="bg-gray-100 px-1 rounded">/usr/bin/guardiand</code> &mdash; Daemon binary</li>
+                    <li><code class="bg-gray-100 px-1 rounded">/usr/bin/guardian-cli</code> &mdash; Admin CLI</li>
+                    <li><code class="bg-gray-100 px-1 rounded">/etc/guardian/guardian.conf</code> &mdash; Configuration</li>
+                    <li><code class="bg-gray-100 px-1 rounded">/etc/guardian/master.pub</code> &mdash; Public key</li>
+                    <li><code class="bg-gray-100 px-1 rounded">/etc/guardian/license.dat</code> &mdash; License file</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-medium text-gray-900 mb-1">systemd Service</h3>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">sudo systemctl enable guardian
+sudo systemctl start guardian
+sudo systemctl status guardian</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

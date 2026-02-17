@@ -1,0 +1,148 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/docs" class="text-sm text-indigo-600 hover:text-indigo-500">&larr; Back to Docs</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900">CLI Reference</h1>
+    <p class="mt-1 text-sm text-gray-500">Command reference for guardian-cli and license-gen tools.</p>
+</div>
+
+<div class="max-w-3xl space-y-8">
+
+    <!-- guardian-cli -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">guardian-cli</h2>
+        <p class="text-sm text-gray-600 mb-4">Admin CLI tool for interacting with the Guardian daemon. Communicates over Unix domain socket.</p>
+
+        <div class="space-y-6">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">status</h3>
+                <p class="text-sm text-gray-600 mb-2">Show daemon status including license validity and hardware match result.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli --config /etc/guardian/guardian.conf status</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">license-info</h3>
+                <p class="text-sm text-gray-600 mb-2">Show decoded license details: ID, customer, dates, modules.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli license-info</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">hardware-info</h3>
+                <p class="text-sm text-gray-600 mb-2">Show hardware fingerprint comparison between expected and actual values.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli hardware-info</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">register</h3>
+                <p class="text-sm text-gray-600 mb-2">Register a new service token for application integration.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli register --service=myapp --modules=analytics,billing</pre>
+                <div class="mt-2 text-xs text-gray-500">
+                    <span class="font-medium">--service</span> (required): service name &middot;
+                    <span class="font-medium">--modules</span> (optional): comma-separated module names
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">list-services</h3>
+                <p class="text-sm text-gray-600 mb-2">List all registered service tokens.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli list-services</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">revoke</h3>
+                <p class="text-sm text-gray-600 mb-2">Revoke a service token.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli revoke --service=myapp</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">rotate</h3>
+                <p class="text-sm text-gray-600 mb-2">Rotate a service token (issues new token, invalidates old).</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli rotate --service=myapp</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">export-hardware</h3>
+                <p class="text-sm text-gray-600 mb-2">Export hardware info as JSON file for license creation.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli export-hardware &gt; hardware-info.json</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">import-license</h3>
+                <p class="text-sm text-gray-600 mb-2">Import a license file to the configured path.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">guardian-cli import-license --license=my-license.license</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- license-gen -->
+    <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">license-gen</h2>
+        <p class="text-sm text-gray-600 mb-4">License generation tool for the issuer&rsquo;s office. Used to create, modify, and verify license files.</p>
+        <p class="text-sm text-gray-500 mb-4 bg-blue-50 border border-blue-200 rounded-md p-3">
+            <strong>Note:</strong> The web admin panel provides the same functionality through the Licenses section. Use license-gen when you need CLI-based workflows or automation.
+        </p>
+
+        <div class="space-y-6">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">init</h3>
+                <p class="text-sm text-gray-600 mb-2">Generate a new Ed25519 master key pair.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen init --output-dir=./keys</pre>
+                <p class="mt-1 text-xs text-gray-500">Creates <code>master.priv</code> and <code>master.pub</code> in the output directory.</p>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">create</h3>
+                <p class="text-sm text-gray-600 mb-2">Create a signed license file bound to specific hardware.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen create \
+  --hardware=hardware-info.json \
+  --customer="ACME Corp" \
+  --expires=2025-12-31 \
+  --sign-with=keys/master.priv \
+  --match-threshold=3 \
+  --module=analytics:max_users=100,tier=enterprise \
+  --module=billing:enabled=true \
+  --output=acme.license</pre>
+                <div class="mt-2 text-xs text-gray-500 space-y-1">
+                    <div><span class="font-medium">--hardware</span> (required): path to hardware-info.json</div>
+                    <div><span class="font-medium">--customer</span> (required): customer name</div>
+                    <div><span class="font-medium">--expires</span> (required): expiry date (YYYY-MM-DD)</div>
+                    <div><span class="font-medium">--sign-with</span> (required): private key path</div>
+                    <div><span class="font-medium">--match-threshold</span>: 1-5 (default: 3)</div>
+                    <div><span class="font-medium">--module</span> (repeatable): name:key=val,key=val</div>
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">update</h3>
+                <p class="text-sm text-gray-600 mb-2">Modify an existing license (change expiry, add/disable modules) and re-sign.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen update \
+  --license=acme.license \
+  --sign-with=keys/master.priv \
+  --expires=2026-12-31 \
+  --module=reporting:max_reports=50 \
+  --disable=legacy \
+  --output=acme-updated.license</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">verify</h3>
+                <p class="text-sm text-gray-600 mb-2">Verify the Ed25519 signature of a license file.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen verify --license=acme.license --pub=keys/master.pub</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">decode</h3>
+                <p class="text-sm text-gray-600 mb-2">Decode and display license contents without verification.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen decode --license=acme.license
+license-gen decode --license=acme.license --json</pre>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-gray-800 mb-1">fingerprint</h3>
+                <p class="text-sm text-gray-600 mb-2">Compute HMAC-SHA256 fingerprints from a hardware JSON file.</p>
+                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">license-gen fingerprint --hardware=hardware-info.json --license=acme.license
+license-gen fingerprint --hardware=hardware-info.json --salt=abc123</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,74 @@
+{{define "content"}}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Audit Log</h1>
+    <p class="mt-1 text-sm text-gray-500">Track all administrative actions.</p>
+</div>
+
+<!-- Filters -->
+<div class="mb-4 flex flex-wrap gap-3">
+    <input type="text" name="q" placeholder="Search by username..."
+           hx-get="/audit/search" hx-trigger="input changed delay:300ms" hx-target="#audit-body" hx-include="[name='action_filter']"
+           class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border">
+    <select name="action_filter"
+            hx-get="/audit/search" hx-trigger="change" hx-target="#audit-body" hx-include="[name='q']"
+            class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border">
+        <option value="">All Actions</option>
+        <option value="auth">Auth</option>
+        <option value="user">Users</option>
+        <option value="key">Keys</option>
+        <option value="project">Projects</option>
+        <option value="hardware">Hardware</option>
+        <option value="license">Licenses</option>
+        <option value="export">Export/Import</option>
+    </select>
+</div>
+
+<div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+            </tr>
+        </thead>
+        <tbody id="audit-body" class="divide-y divide-gray-200">
+            {{range .Logs}}
+            <tr>
+                <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{formatDateTime .CreatedAt}}</td>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{.Username}}</td>
+                <td class="px-4 py-3 text-sm">
+                    <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10">{{.Action}}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                    {{if .EntityType}}{{.EntityType}}{{if .EntityID}} #{{.EntityID}}{{end}}{{else}}-{{end}}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{.IPAddress}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs max-w-xs truncate">{{.Details}}</td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No audit logs found.</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if gt .TotalPages 1}}
+<div class="mt-4 flex items-center justify-between">
+    <p class="text-sm text-gray-500">Showing page {{.Page}} of {{.TotalPages}} ({{.Total}} entries)</p>
+    <div class="flex gap-2">
+        {{if gt .Page 1}}
+        <a href="/audit?page={{sub .Page 1}}" class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Previous</a>
+        {{end}}
+        {{if lt .Page .TotalPages}}
+        <a href="/audit?page={{add .Page 1}}" class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Next</a>
+        {{end}}
+    </div>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,61 @@
+{{define "content"}}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Users</h1>
+        <p class="mt-1 text-sm text-gray-500">Manage admin panel users.</p>
+    </div>
+    <a href="/users/new" class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        New User
+    </a>
+</div>
+
+<div class="overflow-hidden rounded-lg bg-white shadow border border-gray-100">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+            {{range .Users}}
+            <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{.Username}}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{.Email}}</td>
+                <td class="px-4 py-3 text-sm">
+                    {{if eq .Role "admin"}}
+                    <span class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-indigo-700/10">admin</span>
+                    {{else}}
+                    <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-500/10">viewer</span>
+                    {{end}}
+                </td>
+                <td class="px-4 py-3 text-sm">
+                    {{if .IsActive}}
+                    <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-600/20">Active</span>
+                    {{else}}
+                    <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-red-600/20">Disabled</span>
+                    {{end}}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{formatDate .CreatedAt}}</td>
+                <td class="px-4 py-3 text-sm text-right space-x-2">
+                    <a href="/users/{{.ID}}/edit" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                    <form method="POST" action="/users/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this user?')">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No users found.</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
