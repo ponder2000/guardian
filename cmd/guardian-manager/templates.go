@@ -75,6 +75,20 @@ var funcMap = template.FuncMap{
 		b, _ := json.Marshal(v)
 		return string(b)
 	},
+	"formatBytes": func(b int64) string {
+		const (
+			kb = 1024
+			mb = 1024 * kb
+		)
+		switch {
+		case b >= mb:
+			return fmt.Sprintf("%.1f MB", float64(b)/float64(mb))
+		case b >= kb:
+			return fmt.Sprintf("%.1f KB", float64(b)/float64(kb))
+		default:
+			return fmt.Sprintf("%d B", b)
+		}
+	},
 }
 
 // Templates manages page templates with layout composition.

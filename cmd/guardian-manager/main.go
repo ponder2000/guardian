@@ -25,11 +25,13 @@ var (
 type App struct {
 	store  *store.Store
 	logger *log.Logger
+	debDir string
 }
 
 func main() {
 	dbPath := flag.String("db", "data/guardian-manager.db", "Path to SQLite database file")
 	listen := flag.String("listen", ":8080", "HTTP listen address")
+	debDir := flag.String("deb-dir", "deb", "Directory containing .deb packages for download")
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()
 
@@ -68,7 +70,7 @@ func main() {
 		logger.Fatalf("parse templates: %v", err)
 	}
 
-	app := &App{store: s, logger: logger}
+	app := &App{store: s, logger: logger, debDir: *debDir}
 	mw := NewMiddleware(s, logger)
 
 	// Register routes.

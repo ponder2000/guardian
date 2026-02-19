@@ -1,6 +1,6 @@
 FROM golang:1.24-alpine AS builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git dpkg
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -17,6 +17,10 @@ RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X 'main.buildTime=${BUILD_TIME}' -X 'main.author=${AUTHOR}'" \
     -o /guardian-manager ./cmd/guardian-manager/
 
+# Build the .deb package
+RUN make package-deb VERSION=${VERSION} \
+    && test -f bin/guardian_${VERSION}_amd64.deb
+
 FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates tzdata
@@ -27,6 +31,11 @@ WORKDIR /app
 
 COPY --from=builder /guardian-manager .
 
+# Copy .deb package into the final image
+ARG VERSION=dev
+COPY --from=builder /src/bin/guardian_${VERSION}_amd64.deb /app/deb/guardian_${VERSION}_amd64.deb
+RUN ln -s guardian_${VERSION}_amd64.deb /app/deb/guardian.deb
+
 RUN mkdir -p /app/data && chown guardian:guardian /app/data
 
 USER guardian
@@ -36,4 +45,4 @@ EXPOSE 8080
 VOLUME ["/app/data"]
 
 ENTRYPOINT ["./guardian-manager"]
-CMD ["--db", "/app/data/guardian-manager.db", "--listen", ":8080"]
+CMD ["--db", "/app/data/guardian-manager.db", "--listen", ":8080", "--deb-dir", "/app/deb"]

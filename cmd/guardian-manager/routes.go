@@ -22,7 +22,7 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	hardware := handlers.NewHardware(app.store, tmpl, app.logger)
 	access := handlers.NewAccess(app.store, tmpl, app.logger)
 	licenses := handlers.NewLicenses(app.store, tmpl, app.logger)
-	repository := handlers.NewRepository(app.store, tmpl, app.logger)
+	repository := handlers.NewRepository(app.store, tmpl, app.logger, app.debDir)
 	exportImport := handlers.NewExportImport(app.store, tmpl, app.logger)
 
 	// Route helpers.
@@ -108,6 +108,7 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("GET /repository", authed(repository.Index))
 	mux.Handle("GET /repository/pubkey/{id}", authed(repository.DownloadPubKey))
 	mux.Handle("GET /repository/license/{id}", authed(repository.DownloadLicense))
+	mux.Handle("GET /repository/deb/{filename}", authed(repository.DownloadDeb))
 
 	// --- Export / Import (admin) ---
 	mux.Handle("GET /export-import", admin(exportImport.Index))

@@ -1,7 +1,41 @@
 {{define "content"}}
 <div class="mb-6">
     <h1 class="text-2xl font-bold text-gray-900">Repository</h1>
-    <p class="mt-1 text-sm text-gray-500">Download public keys and license files for deployment.</p>
+    <p class="mt-1 text-sm text-gray-500">Download public keys, license files, and daemon packages for deployment.</p>
+</div>
+
+<!-- Guardian Daemon Package -->
+<div class="bg-white shadow rounded-lg border border-gray-100 p-6 mb-6">
+    <h2 class="text-sm font-semibold text-gray-900 mb-4">Guardian Daemon Package</h2>
+    {{if .DebFiles}}
+    <div class="overflow-hidden rounded-lg border border-gray-200">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Filename</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Download</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {{range .DebFiles}}
+                <tr>
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900 font-mono">{{.Filename}}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{formatBytes .Size}}</td>
+                    <td class="px-4 py-3 text-sm text-right">
+                        <a href="/repository/deb/{{.Filename}}" hx-boost="false" class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-500">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                            .deb
+                        </a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="text-sm text-gray-500">No .deb packages available. Build with <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">make package-deb</code> and place in the deb directory.</p>
+    {{end}}
 </div>
 
 <!-- Public Keys -->
