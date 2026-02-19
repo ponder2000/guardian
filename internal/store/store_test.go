@@ -209,6 +209,51 @@ func TestAuditLog(t *testing.T) {
 	}
 }
 
+func TestAuditLogFailedLogin(t *testing.T) {
+	s := testStore(t)
+
+	// Log a failed login with user_id=0 (unknown user). Should store NULL for user_id.
+	err := s.LogAction(0, "unknown_user", "auth.login_failed", "user", 0, "Invalid credentials", "192.168.1.1")
+	if err != nil {
+		t.Fatalf("log failed login: %v", err)
+	}
+
+	// Also test with a real user (disabled account).
+	u, _ := s.CreateUser("realuser", "real@test.com", "pass", "admin")
+	err = s.LogAction(u.ID, u.Username, "auth.login_disabled", "user", u.ID, "Account disabled", "192.168.1.2")
+	if err != nil {
+		t.Fatalf("log disabled login: %v", err)
+	}
+
+	logs, total, err := s.ListAuditLogs(AuditFilter{Limit: 50})
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected 2 logs, got %d", total)
+	}
+
+	// Most recent first (disabled login, then failed login).
+	if logs[0].Action != "auth.login_disabled" {
+		t.Fatalf("expected auth.login_disabled, got %s", logs[0].Action)
+	}
+	if logs[1].Action != "auth.login_failed" {
+		t.Fatalf("expected auth.login_failed, got %s", logs[1].Action)
+	}
+	if logs[1].UserID != nil {
+		t.Fatalf("expected nil user_id for failed login, got %v", *logs[1].UserID)
+	}
+
+	// Filter by "auth" should return both.
+	logs, total, err = s.ListAuditLogs(AuditFilter{Action: "auth", Limit: 50})
+	if err != nil {
+		t.Fatalf("filter by auth: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected 2 auth logs, got %d", total)
+	}
+}
+
 func TestUserCount(t *testing.T) {
 	s := testStore(t)
 

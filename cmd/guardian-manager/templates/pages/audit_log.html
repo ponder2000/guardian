@@ -19,7 +19,7 @@
         <option value="project">Projects</option>
         <option value="hardware">Hardware</option>
         <option value="license">Licenses</option>
-        <option value="export">Export/Import</option>
+        <option value="data">Export/Import</option>
     </select>
 </div>
 
@@ -36,24 +36,7 @@
             </tr>
         </thead>
         <tbody id="audit-body" class="divide-y divide-gray-200">
-            {{range .Logs}}
-            <tr>
-                <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{formatDateTime .CreatedAt}}</td>
-                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{.Username}}</td>
-                <td class="px-4 py-3 text-sm">
-                    <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10">{{.Action}}</span>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-500">
-                    {{if .EntityType}}{{.EntityType}}{{if .EntityID}} #{{.EntityID}}{{end}}{{else}}-{{end}}
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{.IPAddress}}</td>
-                <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs max-w-xs truncate">{{.Details}}</td>
-            </tr>
-            {{else}}
-            <tr>
-                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No audit logs found.</td>
-            </tr>
-            {{end}}
+            {{template "audit_rows" .}}
         </tbody>
     </table>
 </div>
@@ -70,5 +53,26 @@
         {{end}}
     </div>
 </div>
+{{end}}
+{{end}}
+
+{{define "audit_rows"}}
+{{range .Logs}}
+<tr>
+    <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{{formatDateTime .CreatedAt}}</td>
+    <td class="px-4 py-3 text-sm font-medium text-gray-900">{{.Username}}</td>
+    <td class="px-4 py-3 text-sm">
+        <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-700/10">{{.Action}}</span>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-500">
+        {{if .EntityType}}{{.EntityType}}{{if .EntityID}} #{{.EntityID}}{{end}}{{else}}-{{end}}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{.IPAddress}}</td>
+    <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs max-w-xs truncate">{{.Details}}</td>
+</tr>
+{{else}}
+<tr>
+    <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No audit logs found.</td>
+</tr>
 {{end}}
 {{end}}

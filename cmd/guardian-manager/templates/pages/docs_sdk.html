@@ -35,10 +35,10 @@
         <p class="text-sm text-gray-600 mb-4">Package: <code class="bg-gray-100 px-1 rounded">client/go</code></p>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Installation</h3>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">go get github.com/ponder2000/guardian/client/go</pre>
+        <pre class="mb-4"><code class="language-bash">go get github.com/ponder2000/guardian/client/go</code></pre>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">package main
+        <pre class="mb-4"><code class="language-go">package main
 
 import (
     "log"
@@ -53,11 +53,11 @@ func main() {
         guardian.WithModule("analytics"),
         guardian.WithCheckInterval(30 * time.Second),
         guardian.WithStartupTimeout(10 * time.Second),
-        guardian.WithValidHandler(func() {
-            log.Println("License valid")
+        guardian.WithValidHandler(func(info *guardian.LicenseInfo) {
+            log.Printf("License valid — features: %v", info.Features)
         }),
-        guardian.WithInvalidHandler(func(reason string) {
-            log.Printf("License invalid: %s", reason)
+        guardian.WithInvalidHandler(func(info *guardian.LicenseInfo, err error) {
+            log.Fatalf("License invalid: %v", err)
         }),
     )
 
@@ -67,7 +67,7 @@ func main() {
     defer client.Stop()
 
     // Application code here...
-}</pre>
+}</code></pre>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Configuration Options</h3>
         <div class="overflow-hidden rounded-md border border-gray-200">
@@ -79,8 +79,8 @@ func main() {
                 <tbody class="divide-y divide-gray-200">
                     <tr><td class="px-3 py-2 font-mono text-xs">WithSocket(path)</td><td class="px-3 py-2 text-gray-600">Unix socket path (default: /var/run/guardian.sock)</td></tr>
                     <tr><td class="px-3 py-2 font-mono text-xs">WithTokenFile(path)</td><td class="px-3 py-2 text-gray-600">Service token file path</td></tr>
-                    <tr><td class="px-3 py-2 font-mono text-xs">WithModule(name)</td><td class="px-3 py-2 text-gray-600">Module to validate (repeatable)</td></tr>
-                    <tr><td class="px-3 py-2 font-mono text-xs">WithCheckInterval(d)</td><td class="px-3 py-2 text-gray-600">Check interval (default: 60s)</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithModule(name)</td><td class="px-3 py-2 text-gray-600">Module to validate</td></tr>
+                    <tr><td class="px-3 py-2 font-mono text-xs">WithCheckInterval(d)</td><td class="px-3 py-2 text-gray-600">Check interval (default: 5m)</td></tr>
                     <tr><td class="px-3 py-2 font-mono text-xs">WithStartupTimeout(d)</td><td class="px-3 py-2 text-gray-600">Timeout for initial connection</td></tr>
                     <tr><td class="px-3 py-2 font-mono text-xs">WithValidHandler(fn)</td><td class="px-3 py-2 text-gray-600">Callback on successful validation</td></tr>
                     <tr><td class="px-3 py-2 font-mono text-xs">WithInvalidHandler(fn)</td><td class="px-3 py-2 text-gray-600">Callback on validation failure</td></tr>
@@ -98,26 +98,31 @@ func main() {
         <p class="text-sm text-gray-600 mb-4">File: <code class="bg-gray-100 px-1 rounded">client/python/guardian_client.py</code></p>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">from guardian_client import GuardianClient
+        <pre class="mb-4"><code class="language-python">from guardian_client import GuardianClient
 
-def on_valid():
-    print("License valid")
+def on_valid(details):
+    print(f"License valid for {details.module}")
+    print(f"  Features: {details.features}")
+    print(f"  Expires:  {details.expires_in_days} days")
 
-def on_invalid(reason):
-    print(f"License invalid: {reason}")
+def on_invalid(details, error):
+    print(f"License invalid: {error}")
+    sys.exit(1)
 
 client = GuardianClient(
-    socket_path="/var/run/guardian.sock",
-    token_path="/etc/guardian/tokens/myapp.token",
-    modules=["analytics"],
-    check_interval=30,
-    on_valid=on_valid,
-    on_invalid=on_invalid,
+    module="analytics",
+    check_interval=300,
+    startup_timeout=30,
+    valid_handler=on_valid,
+    invalid_handler=on_invalid,
+    # Optional overrides:
+    # socket_path="/var/run/guardian.sock",
+    # token_path="/etc/guardian/tokens/myapp.token",
 )
 
 client.start()
 # Application code...
-client.stop()</pre>
+client.stop()</code></pre>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Environment Variables</h3>
         <div class="overflow-hidden rounded-md border border-gray-200">
@@ -143,21 +148,30 @@ client.stop()</pre>
         <p class="text-sm text-gray-600 mb-4">Requires Java 16+ for <code class="bg-gray-100 px-1 rounded">UnixDomainSocketAddress</code>.</p>
 
         <h3 class="text-sm font-semibold text-gray-800 mb-2">Basic Usage</h3>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-4">import com.guardian.GuardianClient;
+        <pre class="mb-4"><code class="language-java">import com.guardian.GuardianClient;
+import com.guardian.GuardianClient.LicenseDetails;
+import java.time.Duration;
 
-GuardianClient client = GuardianClient.builder()
-    .socketPath("/var/run/guardian.sock")
-    .tokenFile("/etc/guardian/tokens/myapp.token")
-    .module("analytics")
-    .checkIntervalSeconds(30)
-    .startupTimeoutSeconds(10)
-    .onValid(() -&gt; System.out.println("License valid"))
-    .onInvalid(reason -&gt; System.out.println("Invalid: " + reason))
-    .build();
+public class MyService {
+    public static void main(String[] args) throws Exception {
+        GuardianClient client = new GuardianClient.Builder()
+            .module("analytics")
+            .checkInterval(Duration.ofMinutes(5))
+            .startupTimeout(Duration.ofSeconds(30))
+            .onValid(details -&gt; {
+                System.out.println("License valid: " + details.getFeatures());
+            })
+            .onInvalid((details, error) -&gt; {
+                System.err.println("Invalid: " + error.getMessage());
+                System.exit(1);
+            })
+            .build();
 
-client.start();
-// Application code...
-client.stop();</pre>
+        client.start();
+        // Application code...
+        client.stop();
+    }
+}</code></pre>
     </div>
 
     <!-- Status Check -->
@@ -167,14 +181,24 @@ client.stop();</pre>
             All SDKs support an anonymous status check that doesn&rsquo;t require a service token.
             It returns minimal information: whether the daemon is running and the license is valid.
         </p>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">// Go
-status, err := guardian.StatusCheck("/var/run/guardian.sock")
 
-# Python
-status = GuardianClient.status_check("/var/run/guardian.sock")
+        <h3 class="text-sm font-semibold text-gray-800 mt-4 mb-2">Go</h3>
+        <pre class="mb-4"><code class="language-go">status, err := guardian.CheckStatus("/var/run/guardian/guardian.sock")
+if err != nil {
+    log.Fatal("Guardian not reachable:", err)
+}
+fmt.Printf("Status: %s, Expires in %d days\n", status.Status, status.ExpiresInDays)</code></pre>
 
-// Java
-GuardianClient.StatusResult status = GuardianClient.statusCheck("/var/run/guardian.sock");</pre>
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Python</h3>
+        <pre class="mb-4"><code class="language-python">from guardian_client import check_status
+
+status = check_status("/var/run/guardian/guardian.sock")
+print(f"Status: {status.status}, Expires in {status.expires_in_days} days")</code></pre>
+
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">Java</h3>
+        <pre><code class="language-java">GuardianClient.StatusInfo status = GuardianClient.checkStatus("/var/run/guardian/guardian.sock");
+System.out.println("Status: " + status.getStatus());
+System.out.println("Expires in " + status.getExpiresInDays() + " days");</code></pre>
     </div>
 </div>
 {{end}}

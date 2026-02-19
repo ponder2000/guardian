@@ -37,16 +37,20 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := a.store.GetUserByUsername(username)
 	if err != nil || !store.VerifyPassword(user, password) {
+		ip := ClientIP(r)
 		data := PageData{Title: "Login", Error: "Invalid username or password", Username: username}
 		w.WriteHeader(http.StatusUnauthorized)
 		a.templates.RenderPage(w, "login", "auth", data)
+		a.store.LogAction(0, username, "auth.login_failed", "user", 0, "Invalid credentials", ip)
 		return
 	}
 
 	if !user.IsActive {
+		ip := ClientIP(r)
 		data := PageData{Title: "Login", Error: "Account is disabled", Username: username}
 		w.WriteHeader(http.StatusForbidden)
 		a.templates.RenderPage(w, "login", "auth", data)
+		a.store.LogAction(user.ID, user.Username, "auth.login_disabled", "user", user.ID, "Account disabled", ip)
 		return
 	}
 

@@ -105,12 +105,12 @@
     <div class="bg-white shadow rounded-lg border border-gray-100 p-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-3">License File Format</h2>
         <p class="text-sm text-gray-600 mb-3">License files use a simple text format with base64-encoded content.</p>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto mb-3">GUARDIAN-LICENSE-V1
+        <pre class="mb-3"><code class="language-plaintext">GUARDIAN-LICENSE-V1
 PAYLOAD: &lt;base64-encoded JSON payload&gt;
 SIGNATURE: &lt;base64-encoded Ed25519 signature&gt;
-SIGNER: &lt;SHA-256 fingerprint of signing public key&gt;</pre>
+SIGNER: &lt;SHA-256 fingerprint of signing public key&gt;</code></pre>
         <p class="text-sm text-gray-600 mb-2">The JSON payload contains:</p>
-        <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">{
+        <pre><code class="language-json">{
   "license_id": "LIC-XXXXXXXX",
   "version": 1,
   "issued_to": "Customer Name",
@@ -135,7 +135,7 @@ SIGNER: &lt;SHA-256 fingerprint of signing public key&gt;</pre>
     }
   },
   "global_limits": {}
-}</pre>
+}</code></pre>
     </div>
 
     <!-- Wire Protocol -->
@@ -199,9 +199,35 @@ SIGNER: &lt;SHA-256 fingerprint of signing public key&gt;</pre>
             </div>
             <div>
                 <h3 class="font-medium text-gray-900 mb-1">systemd Service</h3>
-                <pre class="bg-gray-900 text-green-400 text-xs p-3 rounded-md overflow-x-auto">sudo systemctl enable guardian
+                <pre><code class="language-bash">sudo systemctl enable guardian
 sudo systemctl start guardian
-sudo systemctl status guardian</pre>
+sudo systemctl status guardian</code></pre>
+            </div>
+            <div>
+                <h3 class="font-medium text-gray-900 mb-1">Docker Integration</h3>
+                <pre><code class="language-yaml"># docker-compose.yml
+services:
+  service_A:
+    image: my-service-a:latest
+    volumes:
+      - /var/run/guardian/guardian.sock:/var/run/guardian/guardian.sock:ro
+      - /etc/guardian/tokens/service_A.token:/etc/guardian/token:ro</code></pre>
+            </div>
+            <div>
+                <h3 class="font-medium text-gray-900 mb-1">Configuration</h3>
+                <pre><code class="language-ini">[daemon]
+socket_path = /var/run/guardian/guardian.sock
+log_path = /var/log/guardian/guardian.log
+log_level = info
+
+[license]
+license_file = /etc/guardian/guardian.license
+master_pub = /etc/guardian/master.pub
+
+[watchdog]
+hardware_check_interval = 5m
+license_check_interval = 1m
+session_timeout = 30m</code></pre>
             </div>
         </div>
     </div>

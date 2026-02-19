@@ -27,11 +27,16 @@ type AuditFilter struct {
 }
 
 // LogAction records an audit log entry.
+// A userID of 0 is stored as NULL (e.g. for failed login attempts by unknown users).
 func (s *Store) LogAction(userID int, username, action, entityType string, entityID int, details, ip string) error {
+	var uid interface{}
+	if userID != 0 {
+		uid = userID
+	}
 	_, err := s.DB.Exec(
 		`INSERT INTO audit_logs (user_id, username, action, entity_type, entity_id, details, ip_address)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		userID, username, action, entityType, entityID, details, ip,
+		uid, username, action, entityType, entityID, details, ip,
 	)
 	return err
 }

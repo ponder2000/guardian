@@ -84,7 +84,7 @@ func (a *Audit) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Render just the table body rows.
-	a.templates.RenderPage(w, "audit_log", "audit_body", AuditData{
+	a.templates.RenderPage(w, "audit_log", "audit_rows", AuditData{
 		PageData: PageData{User: GetUser(r), CSRFToken: GetCSRFToken(r)},
 		Logs:     logs,
 	})
