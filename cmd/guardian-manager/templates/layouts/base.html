@@ -1,13 +1,23 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-gray-50">
+<html lang="en" class="h-full bg-gray-50 dark:bg-gray-900">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - Guardian Manager</title>
     <script src="/static/js/htmx.min.js"></script>
     <script src="/static/js/tailwind.js"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('guardian-theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="/static/css/highlight.min.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
     <script src="/static/js/highlight.min.js"></script>
     <style>
         pre code.hljs { border-radius: 0.375rem; font-size: 0.75rem; line-height: 1.25rem; }
@@ -26,26 +36,26 @@
         .flash-exit { animation: slideOut 0.3s ease-in forwards; }
     </style>
 </head>
-<body class="h-full" hx-boost="true">
-    <div class="min-h-full">
+<body class="h-full min-h-screen bg-gray-50 dark:bg-gray-900" hx-boost="true">
+    <div class="min-h-screen">
         {{template "nav" .}}
         <div class="flex">
             {{template "sidebar" .}}
             <main class="flex-1 p-6 lg:pl-72">
                 <div id="flash-container" class="fixed top-4 right-4 z-50 space-y-2">
                     {{if .Flash}}
-                    <div class="flash-enter rounded-lg bg-green-50 p-4 shadow-lg border border-green-200">
+                    <div class="flash-enter rounded-lg bg-green-50 dark:bg-green-900/30 p-4 shadow-lg border border-green-200 dark:border-green-800">
                         <div class="flex items-center">
                             <svg class="h-5 w-5 text-green-400 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
-                            <p class="text-sm font-medium text-green-800">{{.Flash}}</p>
+                            <p class="text-sm font-medium text-green-800 dark:text-green-200">{{.Flash}}</p>
                         </div>
                     </div>
                     {{end}}
                     {{if .Error}}
-                    <div class="flash-enter rounded-lg bg-red-50 p-4 shadow-lg border border-red-200">
+                    <div class="flash-enter rounded-lg bg-red-50 dark:bg-red-900/30 p-4 shadow-lg border border-red-200 dark:border-red-800">
                         <div class="flex items-center">
                             <svg class="h-5 w-5 text-red-400 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd"/></svg>
-                            <p class="text-sm font-medium text-red-800">{{.Error}}</p>
+                            <p class="text-sm font-medium text-red-800 dark:text-red-200">{{.Error}}</p>
                         </div>
                     </div>
                     {{end}}
@@ -70,7 +80,9 @@
         // HTMX flash trigger
         document.body.addEventListener('showFlash', function(evt) {
             var d = evt.detail;
-            var cls = d.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800';
+            var cls = d.type === 'error'
+                ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+                : 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
             var el = document.createElement('div');
             el.className = 'flash-enter rounded-lg p-4 shadow-lg border ' + cls;
             el.innerHTML = '<p class="text-sm font-medium">' + d.message + '</p>';

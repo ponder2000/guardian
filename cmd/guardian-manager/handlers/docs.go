@@ -40,6 +40,13 @@ func (h *Docs) SDK(w http.ResponseWriter, r *http.Request) {
 	h.templates.RenderPage(w, "docs_sdk", "base", data)
 }
 
+// Installation renders the installation guide page.
+func (h *Docs) Installation(w http.ResponseWriter, r *http.Request) {
+	user := GetUser(r)
+	data := PageData{Title: "Installation", Active: "docs", User: user, CSRFToken: GetCSRFToken(r)}
+	h.templates.RenderPage(w, "docs_installation", "base", data)
+}
+
 // Architecture renders the architecture docs page.
 func (h *Docs) Architecture(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r)

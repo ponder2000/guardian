@@ -1,0 +1,190 @@
+{{define "content"}}
+<div class="mb-6">
+    <a href="/docs" class="text-sm text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">&larr; Back to Docs</a>
+    <h1 class="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">Installation</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Install Guardian on a target machine using the Debian package.</p>
+</div>
+
+<div class="max-w-3xl space-y-8">
+
+    <!-- 1. Download & Install -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">1. Download &amp; Install</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Download the <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">.deb</code> package from the
+            <a href="/repository" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium">Repository</a>
+            page and transfer it to the target machine.
+        </p>
+        <pre><code class="language-bash"># Install the package (or upgrade an existing installation)
+sudo dpkg -i guardian_*.deb
+
+# If there are missing dependencies, fix them
+sudo apt-get install -f</code></pre>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            This installs <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">guardiand</code>,
+            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">guardian-cli</code>, and
+            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">license-gen</code> into
+            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">/usr/local/bin/</code>,
+            along with the default config and systemd unit file.
+            The service is automatically enabled on boot via
+            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">systemctl enable guardian</code>.
+        </p>
+        <div class="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-gray-700 dark:text-gray-300">
+            <p class="font-medium mb-1">Upgrading or reinstalling?</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">
+                The package handles previous installations automatically. On upgrade it stops the running daemon,
+                cleans up stale socket and PID files, installs the new binaries, and restarts the daemon.
+                Your <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">/etc/guardian/guardian.conf</code> is preserved across upgrades.
+            </p>
+        </div>
+    </div>
+
+    <!-- 2. Export Hardware Info -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">2. Export Hardware Info</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Generate a hardware fingerprint file from the target machine. This captures the machine ID, CPU, motherboard, disk serial, and NIC MAC address.
+        </p>
+        <pre><code class="language-bash">sudo guardian-cli export-hardware > hardware-info.json</code></pre>
+        <div class="mt-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md p-3 text-sm text-gray-700 dark:text-gray-300">
+            <p class="font-medium mb-1">Next: Upload this to Guardian Manager</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">
+                Transfer <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">hardware-info.json</code> to your admin machine and
+                upload it via <strong>Projects &rarr; Add Hardware Config</strong> in the
+                <a href="/" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Guardian Manager</a>
+                web panel. Then create a license for this hardware — the signed
+                <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">.license</code> file and
+                <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">master.pub</code> key will be available for download from the
+                <a href="/repository" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Repository</a>.
+            </p>
+        </div>
+    </div>
+
+    <!-- 3. Deploy License & Keys -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">3. Deploy License &amp; Keys</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Copy the public key and signed license file to the target machine.
+            Both are available for download from the <a href="/repository" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium">Repository</a>.
+        </p>
+        <pre><code class="language-bash">sudo cp master.pub /etc/guardian/master.pub
+sudo cp customer.license /etc/guardian/guardian.license</code></pre>
+        <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            <p>Expected file layout after setup:</p>
+        </div>
+        <pre class="mt-2"><code class="language-plaintext">/etc/guardian/
+  guardian.conf          # Configuration (installed by .deb)
+  master.pub             # Signing public key
+  guardian.license        # Signed license file</code></pre>
+    </div>
+
+    <!-- 3. Start the Daemon -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">4. Start the Daemon</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            The service is already enabled on boot by the installer. Start it for the first time:
+        </p>
+        <pre><code class="language-bash">sudo systemctl start guardian</code></pre>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            The daemon will start automatically on subsequent reboots. To check auto-start status:
+        </p>
+        <pre class="mt-2"><code class="language-bash"># Confirm the service is enabled for auto-start on boot
+sudo systemctl is-enabled guardian
+
+# If not enabled (e.g. manually disabled), re-enable it
+sudo systemctl enable guardian</code></pre>
+    </div>
+
+    <!-- 4. Verify Installation -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">5. Verify Installation</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Confirm that the daemon is running and the license is valid:</p>
+        <pre><code class="language-bash"># Check service status
+sudo systemctl status guardian
+
+# Check daemon health and license validity
+guardian-cli --config /etc/guardian/guardian.conf status
+
+# View decoded license details
+guardian-cli license-info
+
+# Compare hardware fingerprints (expected vs actual)
+guardian-cli hardware-info</code></pre>
+        <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">
+            A healthy installation will show <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">active (running)</code> for the service,
+            a valid license status, and matching hardware fingerprints above the configured threshold.
+        </p>
+    </div>
+
+    <!-- 5. Troubleshooting -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">6. Troubleshooting</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">If the daemon fails to start or the license is rejected, use these commands to diagnose the issue:</p>
+        <pre><code class="language-bash"># Check daemon logs for errors
+sudo journalctl -u guardian -n 50 --no-pager
+
+# Verify the license signature independently
+license-gen verify --license=/etc/guardian/guardian.license \
+  --pub=/etc/guardian/master.pub
+
+# Check that the socket file exists
+ls -la /var/run/guardian/guardian.sock
+
+# Check file permissions
+ls -la /etc/guardian/</code></pre>
+
+        <div class="mt-4 space-y-3">
+            <div class="rounded-md border border-gray-200 dark:border-gray-600 p-3">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">License invalid</p>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    The hardware fingerprint may not match. Run
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">guardian-cli hardware-info</code>
+                    to see which components differ. If fewer components match than the configured threshold (default 3 of 5), the license is rejected.
+                </p>
+            </div>
+            <div class="rounded-md border border-gray-200 dark:border-gray-600 p-3">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Socket not found</p>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    The daemon did not start. Check logs with
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">journalctl -u guardian</code>
+                    and verify that the license and public key files exist at the paths specified in
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">/etc/guardian/guardian.conf</code>.
+                </p>
+            </div>
+            <div class="rounded-md border border-gray-200 dark:border-gray-600 p-3">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Permission denied</p>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Ensure config, license, and key files are readable by the guardian service user.
+                    The socket at <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">/var/run/guardian/guardian.sock</code>
+                    should have mode <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">0666</code> so client processes can connect.
+                </p>
+            </div>
+            <div class="rounded-md border border-gray-200 dark:border-gray-600 p-3">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Signature verification failed</p>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    The public key on the target machine does not match the private key that signed the license.
+                    Re-download the correct <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">master.pub</code>
+                    from the <a href="/repository" class="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">Repository</a>.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Uninstall -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-100 dark:border-gray-700 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">7. Uninstall</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            The package automatically stops and disables the daemon on removal.
+        </p>
+        <pre><code class="language-bash"># Remove Guardian (keeps config files in /etc/guardian/)
+sudo dpkg -r guardian
+
+# Or purge completely (removes package + cleans runtime state)
+sudo dpkg -P guardian
+
+# After purge, manually remove config/license if no longer needed
+sudo rm -rf /etc/guardian/</code></pre>
+    </div>
+
+</div>
+{{end}}

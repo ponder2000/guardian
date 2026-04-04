@@ -1,1 +1,72 @@
 /* Guardian Manager custom styles */
+
+/* Dark mode page background — applied directly to guarantee
+   the dark bg covers the full canvas including scroll overflow.
+   Tailwind CDN may not reliably process dark: on <html> itself. */
+html.dark,
+html.dark body {
+    background-color: #111827; /* gray-900 */
+}
+
+/* Dark mode sidebar link overrides */
+.dark .sidebar-link {
+    color: #9ca3af; /* gray-400 */
+}
+.dark .sidebar-link:hover {
+    background-color: #374151; /* gray-700 */
+    color: #f3f4f6; /* gray-100 */
+}
+.dark .sidebar-link.active {
+    background-color: rgba(79, 70, 229, 0.15);
+    color: #818cf8; /* indigo-400 */
+}
+
+/* Dark mode form inputs */
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="date"],
+.dark input[type="number"],
+.dark textarea,
+.dark select {
+    background-color: #1f2937; /* gray-800 */
+    border-color: #4b5563; /* gray-600 */
+    color: #f3f4f6; /* gray-100 */
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #6b7280; /* gray-500 */
+}
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+    border-color: #6366f1; /* indigo-500 */
+}
+
+/* Dark mode checkbox */
+.dark input[type="checkbox"] {
+    background-color: #1f2937;
+    border-color: #4b5563;
+}
+
+/* Dark mode file input */
+.dark input[type="file"] {
+    color: #9ca3af;
+}
+.dark input[type="file"]::file-selector-button {
+    background-color: rgba(79, 70, 229, 0.15);
+    color: #818cf8;
+}
+
+/* Dark mode code blocks */
+.dark pre code.hljs {
+    background-color: #1e293b !important;
+}
+
+/* Dark mode transition for smooth toggling */
+html.dark-transition,
+html.dark-transition *,
+html.dark-transition *::before,
+html.dark-transition *::after {
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease !important;
+}

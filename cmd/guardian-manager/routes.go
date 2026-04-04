@@ -120,5 +120,6 @@ func registerRoutes(mux *http.ServeMux, mw *Middleware, tmpl *Templates, app *Ap
 	mux.Handle("GET /docs", authed(docs.Index))
 	mux.Handle("GET /docs/cli", authed(docs.CLI))
 	mux.Handle("GET /docs/sdk", authed(docs.SDK))
+	mux.Handle("GET /docs/installation", authed(docs.Installation))
 	mux.Handle("GET /docs/architecture", authed(docs.Architecture))
 }

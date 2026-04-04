@@ -1,5 +1,5 @@
 MODULE       := github.com/ponder2000/guardian
-VERSION      ?= 0.2.0
+VERSION      ?= 0.3.0
 COMMIT       := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME   := $(shell date '+%Y-%m-%d %H:%M:%S %Z')
 AUTHOR       := Jay Saha
@@ -14,9 +14,10 @@ GOARCH       ?= $(shell go env GOARCH)
 # Output directory based on target OS
 OUTDIR       := bin/$(GOOS)
 
-# Debian package layout
+# Debian package layout — DEB_ARCH follows GOARCH (amd64, arm64, etc.)
+DEB_ARCH     ?= $(GOARCH)
 DEB_ROOT     := bin/deb-staging
-DEB_PKG      := bin/guardian_$(VERSION)_amd64.deb
+DEB_PKG      := bin/guardian_$(VERSION)_$(DEB_ARCH).deb
 
 .PHONY: all build build-linux build-macos test clean package-deb run-manager docker-build docker-push
 
@@ -52,7 +53,8 @@ test-race:
 # Debian package
 # ---------------------------------------------------------------------------
 
-package-deb: build-linux
+package-deb:
+	$(MAKE) build GOOS=linux GOARCH=$(DEB_ARCH)
 	rm -rf $(DEB_ROOT)
 	# Binaries
 	mkdir -p $(DEB_ROOT)/usr/local/bin
@@ -70,21 +72,60 @@ package-deb: build-linux
 	mkdir -p $(DEB_ROOT)/var/log/guardian
 	# DEBIAN control
 	mkdir -p $(DEB_ROOT)/DEBIAN
-	@printf 'Package: guardian\n\
-Version: $(VERSION)\n\
-Section: admin\n\
-Priority: optional\n\
-Architecture: amd64\n\
-Maintainer: Guardian Authors\n\
-Description: Guardian License Enforcement Daemon\n\
- Hardware-bound license enforcement service that provides\n\
- cryptographic license validation over Unix domain sockets.\n' > $(DEB_ROOT)/DEBIAN/control
-	# postinst — enable and start the service
-	@printf '#!/bin/sh\nset -e\nsystemctl daemon-reload\nsystemctl enable guardian.service\necho "Guardian installed. Run: systemctl start guardian"\n' > $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'Package: guardian'                                        >  $(DEB_ROOT)/DEBIAN/control
+	@echo 'Version: $(VERSION)'                                      >> $(DEB_ROOT)/DEBIAN/control
+	@echo 'Section: admin'                                           >> $(DEB_ROOT)/DEBIAN/control
+	@echo 'Priority: optional'                                       >> $(DEB_ROOT)/DEBIAN/control
+	@echo 'Architecture: $(DEB_ARCH)'                                 >> $(DEB_ROOT)/DEBIAN/control
+	@echo 'Maintainer: Guardian Authors'                              >> $(DEB_ROOT)/DEBIAN/control
+	@echo 'Description: Guardian License Enforcement Daemon'          >> $(DEB_ROOT)/DEBIAN/control
+	@echo ' Hardware-bound license enforcement service that provides' >> $(DEB_ROOT)/DEBIAN/control
+	@echo ' cryptographic license validation over Unix domain sockets.' >> $(DEB_ROOT)/DEBIAN/control
+	# preinst — stop running daemon before upgrade, clean stale state
+	@echo '#!/bin/sh'                                                          >  $(DEB_ROOT)/DEBIAN/preinst
+	@echo 'set -e'                                                             >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo 'if [ "$$1" = "upgrade" ] || [ "$$1" = "install" ]; then'            >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '    if systemctl is-active --quiet guardian.service 2>/dev/null; then' >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '        echo "Stopping running Guardian daemon ..."'                >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '        systemctl stop guardian.service'                             >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '    fi'                                                             >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '    rm -f /var/run/guardian/guardian.sock'                           >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo '    rm -f /var/run/guardian/guardian.pid'                            >> $(DEB_ROOT)/DEBIAN/preinst
+	@echo 'fi'                                                                 >> $(DEB_ROOT)/DEBIAN/preinst
+	chmod 755 $(DEB_ROOT)/DEBIAN/preinst
+	# postinst — reload units, enable, and restart on upgrade
+	@echo '#!/bin/sh'                                                          >  $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'set -e'                                                             >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'systemctl daemon-reload'                                            >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'systemctl enable guardian.service'                                  >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'mkdir -p /var/run/guardian /var/log/guardian'                        >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'if [ "$$1" = "upgrade" ]; then'                                     >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '    echo "Restarting Guardian daemon after upgrade ..."'             >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '    systemctl start guardian.service'                                >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'else'                                                               >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '    echo "Guardian installed. Deploy license and keys, then run:"'  >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo '    echo "  sudo systemctl start guardian"'                         >> $(DEB_ROOT)/DEBIAN/postinst
+	@echo 'fi'                                                                 >> $(DEB_ROOT)/DEBIAN/postinst
 	chmod 755 $(DEB_ROOT)/DEBIAN/postinst
 	# prerm — stop the service before removal
-	@printf '#!/bin/sh\nset -e\nsystemctl stop guardian.service 2>/dev/null || true\nsystemctl disable guardian.service 2>/dev/null || true\n' > $(DEB_ROOT)/DEBIAN/prerm
+	@echo '#!/bin/sh'                                                          >  $(DEB_ROOT)/DEBIAN/prerm
+	@echo 'set -e'                                                             >> $(DEB_ROOT)/DEBIAN/prerm
+	@echo 'if [ "$$1" = "remove" ] || [ "$$1" = "purge" ]; then'              >> $(DEB_ROOT)/DEBIAN/prerm
+	@echo '    systemctl stop guardian.service 2>/dev/null || true'             >> $(DEB_ROOT)/DEBIAN/prerm
+	@echo '    systemctl disable guardian.service 2>/dev/null || true'          >> $(DEB_ROOT)/DEBIAN/prerm
+	@echo 'fi'                                                                 >> $(DEB_ROOT)/DEBIAN/prerm
 	chmod 755 $(DEB_ROOT)/DEBIAN/prerm
+	# postrm — clean up runtime state on purge
+	@echo '#!/bin/sh'                                                          >  $(DEB_ROOT)/DEBIAN/postrm
+	@echo 'set -e'                                                             >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo 'if [ "$$1" = "purge" ]; then'                                       >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo '    rm -f /var/run/guardian/guardian.sock'                           >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo '    rm -f /var/run/guardian/guardian.pid'                            >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo '    rmdir /var/run/guardian 2>/dev/null || true'                     >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo '    echo "Guardian purged. Remove /etc/guardian/ manually if needed."' >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo 'fi'                                                                 >> $(DEB_ROOT)/DEBIAN/postrm
+	@echo 'systemctl daemon-reload 2>/dev/null || true'                        >> $(DEB_ROOT)/DEBIAN/postrm
+	chmod 755 $(DEB_ROOT)/DEBIAN/postrm
 	# conffiles — mark config so upgrades don't overwrite edits
 	@echo "/etc/guardian/guardian.conf" > $(DEB_ROOT)/DEBIAN/conffiles
 	# Build .deb
@@ -106,9 +147,10 @@ run-manager:
 
 DOCKER_IMAGE := jaysaha/guardian-manager
 DOCKER_TAG   ?= $(VERSION)
+DOCKER_PLATFORM ?= linux/amd64
 
 docker-build:
-	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+	docker build --platform $(DOCKER_PLATFORM) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
 
 docker-push: docker-build
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)

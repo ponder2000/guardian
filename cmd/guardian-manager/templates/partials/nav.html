@@ -1,21 +1,32 @@
 {{define "nav"}}
-<nav class="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200">
+<nav class="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
     <div class="px-4 sm:px-6 lg:px-8">
         <div class="flex h-14 items-center justify-between">
             <div class="flex items-center gap-3">
-                <svg class="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <svg class="h-8 w-8 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
                 </svg>
-                <span class="text-lg font-semibold text-gray-900">Guardian Manager</span>
+                <span class="text-lg font-semibold text-gray-900 dark:text-gray-100">Guardian Manager</span>
             </div>
             <div class="flex items-center gap-4">
-                <span class="text-sm text-gray-500">{{.User.Username}}</span>
-                <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium {{if isAdmin .User.Role}}bg-indigo-50 text-indigo-700 ring-1 ring-indigo-700/10{{else}}bg-gray-50 text-gray-600 ring-1 ring-gray-500/10{{end}}">
+                <span class="text-sm text-gray-500 dark:text-gray-400">{{.User.Username}}</span>
+                <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium {{if isAdmin .User.Role}}bg-indigo-50 text-indigo-700 ring-1 ring-indigo-700/10 dark:bg-indigo-900/30 dark:text-indigo-300 dark:ring-indigo-400/20{{else}}bg-gray-50 text-gray-600 ring-1 ring-gray-500/10 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-500/20{{end}}">
                     {{.User.Role}}
                 </span>
+                <!-- Dark mode toggle -->
+                <button type="button" id="theme-toggle" onclick="toggleTheme()" class="rounded-md p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Toggle dark mode">
+                    <!-- Sun icon (shown in dark mode) -->
+                    <svg id="theme-icon-light" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                    </svg>
+                    <!-- Moon icon (shown in light mode) -->
+                    <svg id="theme-icon-dark" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                    </svg>
+                </button>
                 <form method="POST" action="/logout" class="inline">
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                    <button type="submit" class="text-sm font-medium text-gray-500 hover:text-gray-700">
+                    <button type="submit" class="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                         Logout
                     </button>
                 </form>
@@ -24,4 +35,25 @@
     </div>
 </nav>
 <div class="h-14"></div>
+<script>
+function toggleTheme() {
+    var html = document.documentElement;
+    html.classList.add('dark-transition');
+    if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        localStorage.setItem('guardian-theme', 'light');
+    } else {
+        html.classList.add('dark');
+        localStorage.setItem('guardian-theme', 'dark');
+    }
+    updateThemeIcons();
+    setTimeout(function() { html.classList.remove('dark-transition'); }, 300);
+}
+function updateThemeIcons() {
+    var isDark = document.documentElement.classList.contains('dark');
+    document.getElementById('theme-icon-light').classList.toggle('hidden', !isDark);
+    document.getElementById('theme-icon-dark').classList.toggle('hidden', isDark);
+}
+updateThemeIcons();
+</script>
 {{end}}
